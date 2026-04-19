@@ -35,7 +35,7 @@ const state: AppState = {
 };
 
 app.innerHTML = `
-<main class="lab">
+<main class="lab" id="main-content">
   <header class="hero card">
     <p class="eyebrow">crypto-lab-dilithium-reject</p>
     <h1>ML-DSA Rejection Sampling Explorer</h1>
@@ -50,31 +50,32 @@ app.innerHTML = `
   <section class="card">
     <h2>Exhibit 1: Watch the Loop</h2>
     <div class="controls">
-      <label>Message <input id="message-input" value="Transfer $1000 to Bob" /></label>
-      <button id="sign-once">Sign Once</button>
-      <button id="regen-key">Regenerate Key</button>
+      <label for="message-input">Message</label>
+      <input id="message-input" value="Transfer $1000 to Bob" aria-describedby="message-help" />
+      <span id="message-help" class="sr-only">Message content used for demo signing.</span>
+      <button id="sign-once" type="button">Sign Once</button>
+      <button id="regen-key" type="button">Regenerate Key</button>
     </div>
     <p class="meta">Secret key: <span class="secret">██████████████████████████████</span></p>
-    <div id="sign-summary" class="summary"></div>
-    <div id="iteration-feed" class="iteration-feed"></div>
+    <div id="sign-summary" class="summary" role="status" aria-live="polite"></div>
+    <div id="iteration-feed" class="iteration-feed" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Signing iteration records"></div>
   </section>
 
   <section class="card">
     <h2>Exhibit 2: Histogram of Iterations</h2>
     <div class="controls">
-      <label>Preset
-        <select id="preset-select">
+      <label for="preset-select">Preset</label>
+        <select id="preset-select" aria-label="ML-DSA parameter preset">
           <option>ML-DSA-44</option>
           <option selected>ML-DSA-65</option>
           <option>ML-DSA-87</option>
         </select>
-      </label>
-      <button id="run-100">Run 100</button>
-      <button id="run-1000">Run 1000</button>
-      <button id="reset-hist">Reset</button>
+      <button id="run-100" type="button">Run 100</button>
+      <button id="run-1000" type="button">Run 1000</button>
+      <button id="reset-hist" type="button">Reset</button>
     </div>
-    <div id="histogram" class="histogram"></div>
-    <div id="stats" class="stats-grid"></div>
+    <div id="histogram" class="histogram" aria-live="polite" aria-label="Histogram of iterations until acceptance"></div>
+    <div id="stats" class="stats-grid" aria-live="polite" aria-label="Histogram summary statistics"></div>
   </section>
 
   <section class="card deep-dive">
@@ -86,9 +87,10 @@ app.innerHTML = `
     <h2>Exhibit 4: Comparing Signature Schemes</h2>
     <div class="table-wrap">
       <table>
+        <caption>Signing characteristics across classical and post-quantum signature schemes</caption>
         <thead>
           <tr>
-            <th>Algorithm</th><th>Sig size</th><th>Signing</th><th>Verification</th><th>Timing var?</th>
+            <th scope="col">Algorithm</th><th scope="col">Sig size</th><th scope="col">Signing</th><th scope="col">Verification</th><th scope="col">Timing var?</th>
           </tr>
         </thead>
         <tbody>
@@ -111,8 +113,8 @@ app.innerHTML = `
       <li>Isolate signing in HSM/TEE where timing leakage is harder to exploit.</li>
       <li>Deterministic mode is reproducible but can amplify timing correlation by message.</li>
     </ul>
-    <button id="run-distinguishability">Run Key Distinguishability Test (N=1000)</button>
-    <pre id="distinguishability-output" class="dist-output"></pre>
+    <button id="run-distinguishability" type="button">Run Key Distinguishability Test (N=1000)</button>
+    <pre id="distinguishability-output" class="dist-output" role="status" aria-live="polite"></pre>
   </section>
 </main>
 `;
