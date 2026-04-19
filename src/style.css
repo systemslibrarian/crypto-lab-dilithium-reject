@@ -1,10 +1,19 @@
 :root {
   color-scheme: dark;
-  --bg: #07131f;
-  --panel: rgba(7, 27, 41, 0.82);
-  --text: #f5f7fb;
-  --muted: #96a7bb;
-  --accent: #00d4ff;
+  --bg-1: #061018;
+  --bg-2: #0b1723;
+  --panel: rgba(13, 23, 34, 0.86);
+  --line: rgba(255, 255, 255, 0.12);
+  --text: #f2f8ff;
+  --muted: #99abc2;
+  --accept: #00ff88;
+  --reject: #ff3366;
+  --z: #ff00aa;
+  --r0: #ff8800;
+  --ct0: #ffdd00;
+  --hint: #9d4edd;
+  --cyan: #00d4ff;
+  --gold: #ffd700;
 }
 
 * {
@@ -14,48 +23,294 @@
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(0, 212, 255, 0.2), transparent 34%),
-    radial-gradient(circle at top right, rgba(255, 51, 102, 0.12), transparent 28%),
-    linear-gradient(180deg, #05101a 0%, #081826 100%);
+    radial-gradient(circle at 8% 0%, rgba(0, 212, 255, 0.24), transparent 34%),
+    radial-gradient(circle at 92% 0%, rgba(255, 51, 102, 0.2), transparent 30%),
+    linear-gradient(180deg, var(--bg-1), var(--bg-2));
 }
 
-.shell {
-  width: min(100%, 1120px);
+.lab {
+  width: min(1180px, 100%);
   margin: 0 auto;
-  padding: 5rem 1.5rem 4rem;
+  padding: 2rem 1rem 4rem;
+  display: grid;
+  gap: 1rem;
 }
 
-.hero {
-  padding: 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
+.card {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 1.2rem;
   background: var(--panel);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(14px);
+  animation: rise-in 260ms ease both;
+}
+
+.hero h1 {
+  margin: 0;
+  max-width: 16ch;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  font-size: clamp(2.2rem, 6vw, 4.4rem);
+  line-height: 0.95;
+}
+
+.hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.hero-tags span {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 100px;
+  padding: 0.35rem 0.7rem;
+  color: var(--cyan);
+  font-size: 0.82rem;
 }
 
 .eyebrow {
-  margin: 0 0 1rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--accent);
-}
-
-h1 {
-  margin: 0;
-  max-width: 12ch;
-  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
-  font-size: clamp(3rem, 9vw, 5.5rem);
-  line-height: 0.94;
+  color: var(--gold);
+  font-size: 0.78rem;
 }
 
 .lede {
-  max-width: 54ch;
   color: var(--muted);
-  font-size: 1.05rem;
-  line-height: 1.7;
+  max-width: 70ch;
+}
+
+h2 {
+  margin: 0 0 0.8rem;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+label {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--muted);
+}
+
+input,
+select,
+button {
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 0.48rem 0.65rem;
+}
+
+button {
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  border-color: var(--cyan);
+}
+
+.meta {
+  color: var(--muted);
+}
+
+.secret {
+  color: var(--reject);
+  letter-spacing: 0.12em;
+}
+
+.summary {
+  color: var(--muted);
+  min-height: 2rem;
+}
+
+.iteration-feed {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.iteration {
+  border-radius: 14px;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.iteration h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+
+.iteration p {
+  margin: 0.2rem 0;
+  color: #d8e4f4;
+  font-size: 0.92rem;
+}
+
+.iteration.accepted {
+  border-color: color-mix(in srgb, var(--accept) 66%, black);
+  background: color-mix(in srgb, var(--accept) 12%, transparent);
+}
+
+.iteration.rejected {
+  border-color: color-mix(in srgb, var(--reject) 70%, black);
+  background: color-mix(in srgb, var(--reject) 9%, transparent);
+}
+
+.reason-z_too_large {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--z) 56%, transparent);
+}
+
+.reason-r0_too_large {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--r0) 56%, transparent);
+}
+
+.reason-ct0_too_large {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ct0) 56%, transparent);
+}
+
+.reason-hint_too_dense {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hint) 56%, transparent);
+}
+
+.result-line {
+  font-weight: 700;
+}
+
+.histogram {
+  margin-top: 0.8rem;
+  border: 1px dashed color-mix(in srgb, var(--gold) 65%, black);
+  border-radius: 12px;
+  padding: 0.8rem;
+}
+
+.hist-row {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr 4.5rem;
+  gap: 0.5rem;
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--cyan);
+  font-size: 0.9rem;
+}
+
+.stats-grid {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem;
+}
+
+.stats-grid div {
+  padding: 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.stats-grid .k {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stats-grid .v {
+  font-size: 1.1rem;
+}
+
+.check-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.check-box {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 0.7rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.check-box p {
+  color: var(--muted);
+}
+
+pre {
+  white-space: pre-wrap;
+  font-family: "IBM Plex Mono", monospace;
+  color: #e9f5ff;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 8px;
+  padding: 0.55rem;
+  min-height: 2.3rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: left;
+  padding: 0.5rem;
+}
+
+.warn {
+  color: var(--ct0);
+}
+
+.notes {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+.dist-output {
+  min-height: 5rem;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: clamp(2rem, 11vw, 3rem);
+  }
+
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  label {
+    justify-content: space-between;
+  }
 }
