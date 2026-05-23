@@ -47,22 +47,21 @@ function randomIntInclusive(min: number, max: number): number {
   return min + (x % span);
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  let out = '';
-  for (const b of bytes) out += b.toString(16).padStart(2, '0');
-  return out;
-}
-
 function digestSha256(data: Uint8Array): Uint8Array {
   return Uint8Array.from(sha256(data));
 }
 
+/**
+ * Didactic counter-mode XOF over SHA-256. FIPS 204 specifies SHAKE-256;
+ * we use SHA-256 here because the shape of the construction is what
+ * matters pedagogically and SHA-256 is one less dependency to explain.
+ */
 class DeterministicStream {
   private seed: Uint8Array;
 
   private counter = 0;
 
-  private buf = new Uint8Array(0);
+  private buf: Uint8Array = new Uint8Array(0);
 
   private idx = 0;
 
@@ -78,20 +77,20 @@ class DeterministicStream {
     const input = new Uint8Array(this.seed.length + ctr.length);
     input.set(this.seed, 0);
     input.set(ctr, this.seed.length);
-    this.buf = new Uint8Array(digestSha256(input));
+    this.buf = digestSha256(input);
     this.idx = 0;
   }
 
-  async takeByte(): Promise<number> {
+  takeByte(): number {
     if (this.idx >= this.buf.length) this.refill();
     const b = this.buf[this.idx] ?? 0;
     this.idx += 1;
     return b;
   }
 
-  async takeUint16(): Promise<number> {
-    const lo = await this.takeByte();
-    const hi = await this.takeByte();
+  takeUint16(): number {
+    const lo = this.takeByte();
+    const hi = this.takeByte();
     return lo | (hi << 8);
   }
 }
@@ -107,32 +106,43 @@ export function infinityNorm(p: Polynomial, q: number): number {
 }
 
 export function highBits(r: number, alpha: number): number {
-  const rounded = Math.round(r / alpha);
-  return rounded;
+  return Math.round(r / alpha);
 }
 
 export function lowBits(r: number, alpha: number): number {
   return r - highBits(r, alpha) * alpha;
 }
 
-export async function sampleInBall(
+/**
+ * Real SampleInBall, structurally per FIPS 204 § 8.5.3.
+ * Uses the didactic DeterministicStream above instead of SHAKE-256.
+ */
+export function sampleInBall(
   cTilde: Uint8Array,
   tau: number,
   n: number,
-): Promise<Polynomial> {
+): Polynomial {
   const poly = new Int32Array(n);
   const stream = new DeterministicStream(cTilde);
   let placed = 0;
   while (placed < tau) {
-    const pos = (await stream.takeUint16()) % n;
+    const pos = stream.takeUint16() % n;
     if (poly[pos] !== 0) continue;
-    const sign = ((await stream.takeByte()) & 1) === 0 ? 1 : -1;
+    const sign = (stream.takeByte() & 1) === 0 ? 1 : -1;
     poly[pos] = sign;
     placed += 1;
   }
   return poly;
 }
 
+/**
+ * Didactic mask sampler. The real ExpandMask in FIPS 204 § 7.3 derives
+ * 256 coefficients in [-gamma1+1, gamma1] from SHAKE-256(rho' || kappa).
+ * We approximate the *output distribution* using uniform random integers
+ * so per-iteration y has realistic-looking range without dragging in a
+ * full SHAKE implementation. The (rhoPrime, kappa) inputs are accepted
+ * for API parity and folded in via XOR so changing them changes y.
+ */
 export function expandMask(
   rhoPrime: Uint8Array,
   kappa: number,
@@ -145,22 +155,21 @@ export function expandMask(
   const dv = new DataView(seed.buffer);
   dv.setUint32(rhoPrime.length, kappa, false);
 
-  const xofSeed = bytesToHex(seed);
   let carry = 0;
   let carryBits = 0;
+  const span = 2 * gamma1;
 
   for (let i = 0; i < n; i += 1) {
     while (carryBits < 24) {
-      const chunk = randomUint32() ^ (xofSeed.charCodeAt((i + carryBits) % xofSeed.length) ?? 0);
+      const seedByte = seed[(i + carryBits) % seed.length] ?? 0;
+      const chunk = randomUint32() ^ seedByte;
       carry |= (chunk & 0xff) << carryBits;
       carryBits += 8;
     }
     const val = carry & 0xffffff;
     carry >>>= 24;
     carryBits -= 24;
-    const span = 2 * gamma1;
-    const centered = (val % span) - (gamma1 - 1);
-    poly[i] = centered;
+    poly[i] = (val % span) - (gamma1 - 1);
   }
   return poly;
 }
@@ -183,4 +192,8 @@ export function randomBytes(length: number): Uint8Array {
 
 export function randomInt(min: number, max: number): number {
   return randomIntInclusive(min, max);
+}
+
+export function uniform01(): number {
+  return randomUint32() / 0x100000000;
 }

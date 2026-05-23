@@ -1,15 +1,10 @@
-import { instrumentedSign } from './instrumented-sign';
+import { instrumentedSign, type PresetName } from './instrumented-sign';
+import { uniform01 } from './mldsa-primitives';
 
 export interface TimingObservation {
   signatureIndex: number;
   observedTimeMs: number;
   inferredIterations: number;
-}
-
-function uniform01(): number {
-  const rnd = new Uint32Array(1);
-  crypto.getRandomValues(rnd);
-  return (rnd[0] ?? 0) / 0x100000000;
 }
 
 function ksStatistic(a: number[], b: number[]): number {
@@ -40,13 +35,15 @@ export async function collectTimingObservations(
   numSignatures: number,
   secretKey: Uint8Array,
   messages: Uint8Array[],
+  options: { preset?: PresetName; onProgress?: (done: number) => void } = {},
 ): Promise<TimingObservation[]> {
   if (messages.length === 0) throw new Error('messages must not be empty');
 
   const observations: TimingObservation[] = [];
+  const chunkSize = 50;
   for (let i = 0; i < numSignatures; i += 1) {
-    const msg = messages[i % messages.length] ?? messages[0];
-    const result = await instrumentedSign(msg, secretKey);
+    const msg = messages[i % messages.length] ?? messages[0]!;
+    const result = await instrumentedSign(msg, secretKey, undefined, { preset: options.preset });
     const noise = (uniform01() - 0.5) * 0.06;
     const observedTimeMs = Math.max(0, result.totalTimeMs + noise);
 
@@ -55,7 +52,13 @@ export async function collectTimingObservations(
       observedTimeMs,
       inferredIterations: result.acceptedIteration,
     });
+
+    if (options.onProgress && (i + 1) % chunkSize === 0) {
+      options.onProgress(i + 1);
+      await new Promise((r) => setTimeout(r, 0));
+    }
   }
+  options.onProgress?.(numSignatures);
   return observations;
 }
 

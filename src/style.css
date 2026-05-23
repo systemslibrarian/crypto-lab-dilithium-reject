@@ -99,6 +99,29 @@ body {
   max-width: 70ch;
 }
 
+.sim-note {
+  margin-top: 1rem;
+  padding: 0.65rem 0.85rem;
+  border-left: 3px solid var(--gold);
+  background: rgba(255, 215, 0, 0.08);
+  border-radius: 0 10px 10px 0;
+  color: #e9f0fa;
+  font-size: 0.92rem;
+  max-width: 80ch;
+}
+
+.sim-note a {
+  color: var(--cyan);
+}
+
+.sim-note code {
+  background: rgba(0, 0, 0, 0.32);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.88em;
+}
+
 h2 {
   margin: 0 0 0.8rem;
   font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;

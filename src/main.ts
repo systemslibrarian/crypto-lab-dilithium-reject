@@ -1,14 +1,14 @@
 import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
 import './style.css';
 import {
+  PRESETS,
   collectIterationStatistics,
   type IterationRecord,
+  type PresetName,
   instrumentedSign,
 } from './instrumented-sign';
 import { ML_DSA_65, expandMask, lowBits, randomBytes, sampleInBall } from './mldsa-primitives';
 import { collectTimingObservations, distinguishabilityTest } from './timing-analysis';
-
-type ParamPreset = 'ML-DSA-44' | 'ML-DSA-65' | 'ML-DSA-87';
 
 interface AppState {
   keypair: { secretKey: Uint8Array; publicKey: Uint8Array };
@@ -16,7 +16,7 @@ interface AppState {
   iterationHistory: number[];
   histogramRuns: number;
   runningHistogram: boolean;
-  currentPreset: ParamPreset;
+  currentPreset: PresetName;
 }
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -39,16 +39,22 @@ app.innerHTML = `
   <header class="hero card">
     <p class="eyebrow">crypto-lab-dilithium-reject</p>
     <h1>ML-DSA Rejection Sampling Explorer</h1>
-    <p class="lede">Fiat-Shamir with Aborts is visible iteration-by-iteration: each candidate signature is accepted or rejected with explicit norm bounds.</p>
+    <p class="lede">Fiat-Shamir with Aborts visualized iteration-by-iteration: each candidate is accepted or rejected against four explicit norm bounds.</p>
     <div class="hero-tags">
       <span>FIPS 204 (ML-DSA-65)</span>
       <span>Signing is loop + abort</span>
       <span>Security through rejection</span>
     </div>
+    <p class="sim-note" role="note">
+      <strong>Didactic simulation.</strong>
+      The iteration trace below is calibrated to ML-DSA's published acceptance distribution; it is not a fork of the production signing loop. The valid signature shown is produced by <code>@noble/post-quantum</code>'s real ML-DSA-65. See the
+      <a href="https://github.com/systemslibrarian/crypto-lab-dilithium-reject#how-this-demo-works-important">README</a> for the boundary.
+    </p>
   </header>
 
   <section class="card">
     <h2>Exhibit 1: Watch the Loop</h2>
+    <p class="meta">Fixed at ML-DSA-65. Each click runs one didactic trace and one real noble signature.</p>
     <div class="controls">
       <label for="message-input">Message</label>
       <input id="message-input" value="Transfer $1000 to Bob" aria-describedby="message-help" />
@@ -56,13 +62,14 @@ app.innerHTML = `
       <button id="sign-once" type="button">Sign Once</button>
       <button id="regen-key" type="button">Regenerate Key</button>
     </div>
-    <p class="meta">Secret key: <span class="secret">██████████████████████████████</span></p>
+    <p class="meta">Secret key: <span class="secret" aria-hidden="true">██████████████████████████████</span></p>
     <div id="sign-summary" class="summary" role="status" aria-live="polite"></div>
-    <div id="iteration-feed" class="iteration-feed" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Signing iteration records"></div>
+    <div id="iteration-feed" class="iteration-feed" role="log" aria-label="Signing iteration records"></div>
   </section>
 
   <section class="card">
     <h2>Exhibit 2: Histogram of Iterations</h2>
+    <p class="meta">Each preset uses its own simulated acceptance probability; switching presets resets the histogram.</p>
     <div class="controls">
       <label for="preset-select">Preset</label>
         <select id="preset-select" aria-label="ML-DSA parameter preset">
@@ -75,7 +82,7 @@ app.innerHTML = `
       <button id="reset-hist" type="button">Reset</button>
     </div>
     <div id="histogram" class="histogram" aria-live="polite" aria-label="Histogram of iterations until acceptance"></div>
-    <div id="stats" class="stats-grid" aria-live="polite" aria-label="Histogram summary statistics"></div>
+    <div id="stats" class="stats-grid" aria-label="Histogram summary statistics"></div>
   </section>
 
   <section class="card deep-dive">
@@ -87,19 +94,19 @@ app.innerHTML = `
     <h2>Exhibit 4: Comparing Signature Schemes</h2>
     <div class="table-wrap">
       <table>
-        <caption>Signing characteristics across classical and post-quantum signature schemes</caption>
+        <caption>Signing characteristics across classical and post-quantum signature schemes. Timing figures are order-of-magnitude estimates for laptop-class hardware; consult library benchmarks for current values.</caption>
         <thead>
           <tr>
             <th scope="col">Algorithm</th><th scope="col">Sig size</th><th scope="col">Signing</th><th scope="col">Verification</th><th scope="col">Timing var?</th>
           </tr>
         </thead>
         <tbody>
-          <tr><td>Ed25519</td><td>64B</td><td>50 us</td><td>65 us</td><td>No</td></tr>
-          <tr><td>ECDSA</td><td>64B</td><td>80 us</td><td>85 us</td><td>No</td></tr>
-          <tr><td>ML-DSA-65</td><td>3309B</td><td>Varies</td><td>95 us</td><td class="warn">Yes (reject loop)</td></tr>
-          <tr><td>SLH-DSA</td><td>8-49KB</td><td>Slow</td><td>Fast</td><td>Yes (trees)</td></tr>
-          <tr><td>FALCON-512</td><td>666B</td><td>200 us</td><td>45 us</td><td>Yes (Gaussian)</td></tr>
-          <tr><td>LMS_H10</td><td>1452B</td><td>30 us</td><td>50 us</td><td>No (stateful)</td></tr>
+          <tr><td>Ed25519</td><td>64 B</td><td>~50 us</td><td>~65 us</td><td>No</td></tr>
+          <tr><td>ECDSA P-256</td><td>64 B</td><td>~80 us</td><td>~85 us</td><td>No</td></tr>
+          <tr><td>ML-DSA-65</td><td>3309 B</td><td>Varies (reject loop)</td><td>~95 us</td><td class="warn">Yes (by design)</td></tr>
+          <tr><td>SLH-DSA-128s</td><td>8 KB</td><td>Slow (hash trees)</td><td>Fast</td><td>Yes (trees)</td></tr>
+          <tr><td>FALCON-512</td><td>666 B</td><td>~200 us</td><td>~45 us</td><td>Yes (Gaussian)</td></tr>
+          <tr><td>LMS H10/W4</td><td>1452 B</td><td>~30 us</td><td>~50 us</td><td>No (stateful)</td></tr>
         </tbody>
       </table>
     </div>
@@ -113,6 +120,7 @@ app.innerHTML = `
       <li>Isolate signing in HSM/TEE where timing leakage is harder to exploit.</li>
       <li>Deterministic mode is reproducible but can amplify timing correlation by message.</li>
     </ul>
+    <p class="meta">The KS test below uses the same calibrated simulation for both keys, so it is structurally indistinguishable: it shows the principle (sk-independent acceptance) rather than a measurement of real noble timings.</p>
     <button id="run-distinguishability" type="button">Run Key Distinguishability Test (N=1000)</button>
     <pre id="distinguishability-output" class="dist-output" role="status" aria-live="polite"></pre>
   </section>
@@ -134,25 +142,6 @@ const checkGrid = document.querySelector<HTMLDivElement>('#check-grid')!;
 const runDistinguishabilityButton = document.querySelector<HTMLButtonElement>('#run-distinguishability')!;
 const distinguishabilityOutput = document.querySelector<HTMLPreElement>('#distinguishability-output')!;
 
-if (
-  !messageInput ||
-  !signOnceButton ||
-  !regenKeyButton ||
-  !signSummary ||
-  !iterationFeed ||
-  !histogramRoot ||
-  !statsRoot ||
-  !run100 ||
-  !run1000 ||
-  !resetHist ||
-  !presetSelect ||
-  !checkGrid ||
-  !runDistinguishabilityButton ||
-  !distinguishabilityOutput
-) {
-  throw new Error('Missing required UI elements');
-}
-
 function escapeHtml(input: string): string {
   return input
     .replaceAll('&', '&amp;')
@@ -160,12 +149,6 @@ function escapeHtml(input: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
-}
-
-function paramAcceptanceHint(preset: ParamPreset): number {
-  if (preset === 'ML-DSA-44') return 0.31;
-  if (preset === 'ML-DSA-87') return 0.22;
-  return 0.26;
 }
 
 function quantile(values: number[], q: number): number {
@@ -223,7 +206,7 @@ function renderHistogram(): void {
     const bars = '█'.repeat(Math.max(1, Math.round((c / maxBucket) * 22)));
     lines.push(`<div class="hist-row"><span>${key.toString().padStart(2, ' ')}</span><span>${bars}</span><span>${pct.toFixed(1)}%</span></div>`);
   }
-  histogramRoot.innerHTML = lines.join('');
+  histogramRoot.innerHTML = lines.length > 0 ? lines.join('') : '<p class="meta">No data yet. Click Run 100 or Run 1000.</p>';
 
   const mean =
     state.iterationHistory.length > 0
@@ -235,13 +218,14 @@ function renderHistogram(): void {
   const max = state.iterationHistory.length > 0 ? Math.max(...state.iterationHistory) : 0;
 
   statsRoot.innerHTML = `
+    <div><span class="k">Preset</span><span class="v">${state.currentPreset}</span></div>
     <div><span class="k">Runs</span><span class="v">${state.histogramRuns}</span></div>
     <div><span class="k">Mean</span><span class="v">${fmt.format(mean)}</span></div>
     <div><span class="k">Median</span><span class="v">${fmt.format(median)}</span></div>
     <div><span class="k">P90</span><span class="v">${fmt.format(p90)}</span></div>
     <div><span class="k">P99</span><span class="v">${fmt.format(p99)}</span></div>
     <div><span class="k">Max</span><span class="v">${fmt.format(max)}</span></div>
-    <div><span class="k">P(accept)</span><span class="v">~${paramAcceptanceHint(state.currentPreset)}</span></div>
+    <div><span class="k">P(accept)</span><span class="v">~${PRESETS[state.currentPreset].acceptance}</span></div>
   `;
 }
 
@@ -250,31 +234,31 @@ function renderCheckExplanations(): void {
     <article class="check-box">
       <h3>Check 1: ||z||∞ &lt; gamma1 - beta</h3>
       <p>z = y + c*s1. Large z can correlate challenge and secret signs. Rejecting out-of-range z keeps signatures statistically independent of s1.</p>
-      <button data-check="z">Show example</button>
+      <button data-check="z" type="button">Show example</button>
       <pre id="ex-z"></pre>
     </article>
     <article class="check-box">
       <h3>Check 2: ||r0||∞ &lt; gamma2 - beta</h3>
       <p>r0 carries low bits from w - c*s2. If r0 is too large, low-bit leakage can reveal information about s2.</p>
-      <button data-check="r0">Show example</button>
+      <button data-check="r0" type="button">Show example</button>
       <pre id="ex-r0"></pre>
     </article>
     <article class="check-box">
       <h3>Check 3: ||c*t0||∞ &lt; gamma2</h3>
       <p>This keeps hint construction unambiguous and verification-correct. Oversized c*t0 risks malformed hint behavior.</p>
-      <button data-check="ct0">Show example</button>
+      <button data-check="ct0" type="button">Show example</button>
       <pre id="ex-ct0"></pre>
     </article>
     <article class="check-box">
-      <h3>Check 4: ||h||wt <= omega</h3>
-      <p>Hint density is capped (omega = 55). Dense hints increase signature size and can bias leakage.</p>
-      <button data-check="hint">Show example</button>
+      <h3>Check 4: ||h||wt ≤ omega</h3>
+      <p>Hint density is capped (omega = 55 for ML-DSA-65). Dense hints increase signature size and can bias leakage.</p>
+      <button data-check="hint" type="button">Show example</button>
       <pre id="ex-hint"></pre>
     </article>
   `;
 
   checkGrid.querySelectorAll<HTMLButtonElement>('button[data-check]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const kind = btn.dataset.check;
       if (!kind) return;
 
@@ -288,7 +272,7 @@ function renderCheckExplanations(): void {
         (document.querySelector('#ex-r0') as HTMLPreElement).textContent = `lowBits(gamma2 + 133) = ${sample}\nCheck threshold: ${ML_DSA_65.gamma2 - ML_DSA_65.beta}`;
       }
       if (kind === 'ct0') {
-        const c = await sampleInBall(randomBytes(32), ML_DSA_65.tau, ML_DSA_65.n);
+        const c = sampleInBall(randomBytes(32), ML_DSA_65.tau, ML_DSA_65.n);
         const nonzero = c.reduce((acc, cur) => acc + (cur !== 0 ? 1 : 0), 0);
         (document.querySelector('#ex-ct0') as HTMLPreElement).textContent = `SampleInBall nonzero positions: ${nonzero}\nct0 bound: ${ML_DSA_65.gamma2}`;
       }
@@ -305,9 +289,14 @@ async function signOnce(): Promise<void> {
   iterationFeed.innerHTML = '';
   signSummary.innerHTML = '<p>Signing...</p>';
 
-  const result = await instrumentedSign(msg, state.keypair.secretKey, (record) => {
-    renderIteration(record, iterationFeed.childElementCount);
-  });
+  const result = await instrumentedSign(
+    msg,
+    state.keypair.secretKey,
+    (record) => {
+      renderIteration(record, iterationFeed.childElementCount);
+    },
+    { preset: 'ML-DSA-65' },
+  );
 
   const verified = ml_dsa65.verify(result.signature, msg, state.keypair.publicKey);
   state.iterationHistory.push(result.acceptedIteration);
@@ -316,8 +305,8 @@ async function signOnce(): Promise<void> {
 
   signSummary.innerHTML = `
     <p>Message: ${escapeHtml(state.currentMessage)}</p>
-    <p>Accepted iteration: <strong>${result.acceptedIteration}</strong> | Total time: <strong>${result.totalTimeMs.toFixed(3)} ms</strong></p>
-    <p>Signature valid via noble verify: <strong>${verified ? 'yes' : 'no'}</strong></p>
+    <p>Accepted iteration: <strong>${result.acceptedIteration}</strong> | Simulated total time: <strong>${result.totalTimeMs.toFixed(3)} ms</strong></p>
+    <p>Signature valid via noble ML-DSA-65 verify: <strong>${verified ? 'yes' : 'no'}</strong></p>
   `;
 }
 
@@ -326,9 +315,18 @@ async function runHistogramBatch(count: number): Promise<void> {
   state.runningHistogram = true;
   run100.disabled = true;
   run1000.disabled = true;
+  presetSelect.disabled = true;
 
   const msg = encoder.encode(state.currentMessage);
-  const stats = await collectIterationStatistics(count, state.keypair.secretKey, msg);
+  signSummary.innerHTML = `<p>Running ${count} signatures at ${state.currentPreset}...</p>`;
+  const stats = await collectIterationStatistics(count, state.keypair.secretKey, msg, {
+    preset: state.currentPreset,
+    onProgress: (done) => {
+      if (done < count) {
+        signSummary.innerHTML = `<p>Running ${state.currentPreset} batch: ${done} / ${count}...</p>`;
+      }
+    },
+  });
   for (const c of stats.iterationCounts) {
     state.iterationHistory.push(c);
     state.histogramRuns += 1;
@@ -345,25 +343,37 @@ async function runHistogramBatch(count: number): Promise<void> {
     .join(' | ');
 
   signSummary.innerHTML = `
-    <p>Histogram batch complete (${count} signatures).</p>
+    <p>Batch complete: ${count} signatures at <strong>${state.currentPreset}</strong>.</p>
     <p>Mean: ${stats.mean.toFixed(2)} | Median: ${stats.median.toFixed(2)} | P90: ${stats.p90.toFixed(2)} | P99: ${stats.p99.toFixed(2)} | Max: ${stats.max}</p>
     <p>${breakdown}</p>
   `;
 
   run100.disabled = false;
   run1000.disabled = false;
+  presetSelect.disabled = false;
   state.runningHistogram = false;
 }
 
 async function runDistinguishabilityTestAction(): Promise<void> {
   runDistinguishabilityButton.disabled = true;
-  distinguishabilityOutput.textContent = 'Running 2 x 1000 signatures...';
+  distinguishabilityOutput.textContent = 'Running 2 x 1000 signatures at ML-DSA-65...';
 
   const kp2 = ml_dsa65.keygen();
   const messages = Array.from({ length: 16 }, (_, i) => encoder.encode(`message-${i}`));
+  let done1 = 0;
+  let done2 = 0;
+  const render = (): void => {
+    distinguishabilityOutput.textContent = `Running 2 x 1000 signatures at ML-DSA-65...\nkey 1: ${done1} / 1000\nkey 2: ${done2} / 1000`;
+  };
   const [obs1, obs2] = await Promise.all([
-    collectTimingObservations(1000, state.keypair.secretKey, messages),
-    collectTimingObservations(1000, kp2.secretKey, messages),
+    collectTimingObservations(1000, state.keypair.secretKey, messages, {
+      preset: 'ML-DSA-65',
+      onProgress: (d) => { done1 = d; render(); },
+    }),
+    collectTimingObservations(1000, kp2.secretKey, messages, {
+      preset: 'ML-DSA-65',
+      onProgress: (d) => { done2 = d; render(); },
+    }),
   ]);
 
   const verdict = distinguishabilityTest(obs1, obs2);
@@ -372,6 +382,10 @@ async function runDistinguishabilityTestAction(): Promise<void> {
     `Distinguishable: ${verdict.distinguishable ? 'yes' : 'no'}`,
     `Confidence: ${Math.round(verdict.confidenceLevel * 100)}%`,
     verdict.note,
+    '',
+    'Note: both keys use the same simulated acceptance distribution,',
+    'so this output illustrates the FIPS 204 design intent rather',
+    'than measured noble signing times.',
   ].join('\n');
   runDistinguishabilityButton.disabled = false;
 }
@@ -382,8 +396,11 @@ messageInput.addEventListener('input', () => {
 
 signOnceButton.addEventListener('click', async () => {
   signOnceButton.disabled = true;
-  await signOnce();
-  signOnceButton.disabled = false;
+  try {
+    await signOnce();
+  } finally {
+    signOnceButton.disabled = false;
+  }
 });
 
 regenKeyButton.addEventListener('click', () => {
@@ -406,8 +423,13 @@ resetHist.addEventListener('click', () => {
 });
 
 presetSelect.addEventListener('change', () => {
-  const value = presetSelect.value as ParamPreset;
-  state.currentPreset = value;
+  if (state.runningHistogram) {
+    presetSelect.value = state.currentPreset;
+    return;
+  }
+  state.currentPreset = presetSelect.value as PresetName;
+  state.iterationHistory = [];
+  state.histogramRuns = 0;
   renderHistogram();
 });
 
