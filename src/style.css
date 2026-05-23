@@ -14,6 +14,35 @@
   --hint: #9d4edd;
   --cyan: #00d4ff;
   --gold: #ffd700;
+  --code-bg: rgba(0, 0, 0, 0.28);
+  --input-bg: rgba(0, 0, 0, 0.32);
+  --iteration-text: #d8e4f4;
+  --halo-cyan: rgba(0, 212, 255, 0.24);
+  --halo-pink: rgba(255, 51, 102, 0.2);
+}
+
+:root[data-theme="light"] {
+  /* Tuned for WCAG AAA (≈7:1) text contrast on the white panel background. */
+  color-scheme: light;
+  --bg-1: #eef2f7;
+  --bg-2: #ffffff;
+  --panel: rgba(255, 255, 255, 0.92);
+  --line: rgba(15, 30, 50, 0.16);
+  --text: #1a2333;          /* ~14:1 on white */
+  --muted: #3e4a5b;         /* ~8.6:1 on white */
+  --accept: #096636;        /* ~7.0:1 — also used as border/tint */
+  --reject: #a40d33;        /* ~7.1:1 */
+  --z: #9c0566;             /* ~7.3:1 */
+  --r0: #8a4500;            /* ~7.4:1 */
+  --ct0: #6a5000;           /* ~7.5:1 — used in .warn text */
+  --hint: #5e2d97;          /* ~7.3:1 */
+  --cyan: #005a78;          /* ~7.7:1 — used in hero tags, hist rows, links */
+  --gold: #5e4400;          /* ~7.5:1 — deep amber (replaces decorative gold) */
+  --code-bg: rgba(15, 30, 50, 0.06);
+  --input-bg: rgba(255, 255, 255, 0.95);
+  --iteration-text: #1a2333;
+  --halo-cyan: rgba(0, 97, 128, 0.08);
+  --halo-pink: rgba(164, 13, 51, 0.06);
 }
 
 * {
@@ -27,8 +56,8 @@ body {
   line-height: 1.5;
   color: var(--text);
   background:
-    radial-gradient(circle at 8% 0%, rgba(0, 212, 255, 0.24), transparent 34%),
-    radial-gradient(circle at 92% 0%, rgba(255, 51, 102, 0.2), transparent 30%),
+    radial-gradient(circle at 8% 0%, var(--halo-cyan), transparent 34%),
+    radial-gradient(circle at 92% 0%, var(--halo-pink), transparent 30%),
     linear-gradient(180deg, var(--bg-1), var(--bg-2));
 }
 
@@ -80,7 +109,7 @@ body {
 }
 
 .hero-tags span {
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--line);
   border-radius: 100px;
   padding: 0.35rem 0.7rem;
   color: var(--cyan);
@@ -103,9 +132,9 @@ body {
   margin-top: 1rem;
   padding: 0.65rem 0.85rem;
   border-left: 3px solid var(--gold);
-  background: rgba(255, 215, 0, 0.08);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
   border-radius: 0 10px 10px 0;
-  color: #e9f0fa;
+  color: var(--text);
   font-size: 0.92rem;
   max-width: 80ch;
 }
@@ -115,7 +144,7 @@ body {
 }
 
 .sim-note code {
-  background: rgba(0, 0, 0, 0.32);
+  background: var(--code-bg);
   padding: 0.05rem 0.3rem;
   border-radius: 4px;
   font-family: "IBM Plex Mono", monospace;
@@ -144,11 +173,16 @@ label {
 input,
 select,
 button {
-  background: rgba(0, 0, 0, 0.32);
+  background: var(--input-bg);
   color: var(--text);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0.48rem 0.65rem;
+}
+
+button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 input:focus-visible,
@@ -194,7 +228,7 @@ button:hover {
 .iteration {
   border-radius: 14px;
   padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--line);
 }
 
 .iteration h3 {
@@ -204,7 +238,7 @@ button:hover {
 
 .iteration p {
   margin: 0.2rem 0;
-  color: #d8e4f4;
+  color: var(--iteration-text);
   font-size: 0.92rem;
 }
 
@@ -264,7 +298,7 @@ button:hover {
 .stats-grid div {
   padding: 0.55rem;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--line);
   display: grid;
   gap: 0.2rem;
 }
@@ -286,10 +320,10 @@ button:hover {
 }
 
 .check-box {
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--line);
   border-radius: 14px;
   padding: 0.7rem;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--code-bg);
 }
 
 .check-box p {
@@ -299,8 +333,8 @@ button:hover {
 pre {
   white-space: pre-wrap;
   font-family: "IBM Plex Mono", monospace;
-  color: #e9f5ff;
-  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  background: var(--code-bg);
   border-radius: 8px;
   padding: 0.55rem;
   min-height: 2.3rem;
@@ -323,7 +357,7 @@ caption {
 
 th,
 td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid var(--line);
   text-align: left;
   padding: 0.5rem;
 }
@@ -386,6 +420,28 @@ td {
   }
 }
 
+
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+  width: auto;
+  border-radius: 100px;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 768px) {
+  .theme-toggle {
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.78rem;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

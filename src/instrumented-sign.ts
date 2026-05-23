@@ -159,12 +159,20 @@ function quantile(sorted: number[], q: number): number {
   return low + (high - low) * weight;
 }
 
-export async function instrumentedSign(
-  message: Uint8Array,
-  secretKey: Uint8Array,
-  onIteration?: (record: IterationRecord) => void,
-  options: { preset?: PresetName; maxIterations?: number } = {},
-): Promise<SigningResult> {
+export interface TraceResult {
+  iterations: IterationRecord[];
+  acceptedIteration: number;
+  totalTimeMs: number;
+}
+
+/**
+ * Pure simulation: generate the rejection-loop trace for `preset` without
+ * touching @noble/post-quantum. Use this for batch statistics and tests
+ * where a real signature is not needed.
+ */
+export async function simulateRejectionTrace(
+  options: { preset?: PresetName; maxIterations?: number; onIteration?: (record: IterationRecord) => void } = {},
+): Promise<TraceResult> {
   const preset = options.preset ?? 'ML-DSA-65';
   const maxIterations = options.maxIterations ?? 100;
   const params = PRESETS[preset];
@@ -243,27 +251,34 @@ export async function instrumentedSign(
     };
 
     iterations.push(record);
-    onIteration?.(record);
+    options.onIteration?.(record);
     accepted = shouldAccept;
     if (!accepted) kappa += ML_DSA_65.l;
   }
 
-  const signature = ml_dsa65.sign(message, secretKey, { extraEntropy: randomBytes(32) });
   const totalTimeMs = iterations.reduce((acc, it) => acc + it.timeMs, 0);
+  return { iterations, acceptedIteration: iterations.length, totalTimeMs };
+}
 
+export async function instrumentedSign(
+  message: Uint8Array,
+  secretKey: Uint8Array,
+  onIteration?: (record: IterationRecord) => void,
+  options: { preset?: PresetName; maxIterations?: number } = {},
+): Promise<SigningResult> {
+  const trace = await simulateRejectionTrace({ ...options, onIteration });
+  const signature = ml_dsa65.sign(message, secretKey, { extraEntropy: randomBytes(32) });
   return {
     signature,
-    iterations,
-    acceptedIteration: iterations.length,
-    totalTimeMs,
+    iterations: trace.iterations,
+    acceptedIteration: trace.acceptedIteration,
+    totalTimeMs: trace.totalTimeMs,
     message: utf8(message),
   };
 }
 
 export async function collectIterationStatistics(
   numSignatures: number,
-  secretKey: Uint8Array,
-  message: Uint8Array,
   options: { preset?: PresetName; onProgress?: (done: number) => void } = {},
 ): Promise<{
   iterationCounts: number[];
@@ -279,9 +294,9 @@ export async function collectIterationStatistics(
   const chunkSize = 25;
 
   for (let i = 0; i < numSignatures; i += 1) {
-    const res = await instrumentedSign(message, secretKey, undefined, { preset: options.preset });
-    iterationCounts.push(res.acceptedIteration);
-    for (const iter of res.iterations) {
+    const trace = await simulateRejectionTrace({ preset: options.preset });
+    iterationCounts.push(trace.acceptedIteration);
+    for (const iter of trace.iterations) {
       if (iter.result === 'REJECTED' && iter.rejectionReason) {
         reasons.set(iter.rejectionReason, (reasons.get(iter.rejectionReason) ?? 0) + 1);
       }

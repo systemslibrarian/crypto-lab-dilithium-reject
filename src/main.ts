@@ -54,11 +54,11 @@ app.innerHTML = `
 
   <section class="card">
     <h2>Exhibit 1: Watch the Loop</h2>
-    <p class="meta">Fixed at ML-DSA-65. Each click runs one didactic trace and one real noble signature.</p>
+    <p class="meta">Fixed at ML-DSA-65. Each click (or Enter in the message field) runs one didactic trace and one real noble signature.</p>
     <div class="controls">
       <label for="message-input">Message</label>
       <input id="message-input" value="Transfer $1000 to Bob" aria-describedby="message-help" />
-      <span id="message-help" class="sr-only">Message content used for demo signing.</span>
+      <span id="message-help" class="sr-only">Message content used for demo signing. Press Enter to sign.</span>
       <button id="sign-once" type="button">Sign Once</button>
       <button id="regen-key" type="button">Regenerate Key</button>
     </div>
@@ -120,8 +120,8 @@ app.innerHTML = `
       <li>Isolate signing in HSM/TEE where timing leakage is harder to exploit.</li>
       <li>Deterministic mode is reproducible but can amplify timing correlation by message.</li>
     </ul>
-    <p class="meta">The KS test below uses the same calibrated simulation for both keys, so it is structurally indistinguishable: it shows the principle (sk-independent acceptance) rather than a measurement of real noble timings.</p>
-    <button id="run-distinguishability" type="button">Run Key Distinguishability Test (N=1000)</button>
+    <p class="meta">The KS test below compares two independent populations drawn from the same calibrated simulation, so under H0 they should be indistinguishable. It illustrates the FIPS 204 design intent (sk-independent acceptance) rather than measuring real noble timings.</p>
+    <button id="run-distinguishability" type="button">Run KS Distinguishability Test (2 × N=1000)</button>
     <pre id="distinguishability-output" class="dist-output" role="status" aria-live="polite"></pre>
   </section>
 </main>
@@ -299,9 +299,6 @@ async function signOnce(): Promise<void> {
   );
 
   const verified = ml_dsa65.verify(result.signature, msg, state.keypair.publicKey);
-  state.iterationHistory.push(result.acceptedIteration);
-  state.histogramRuns += 1;
-  renderHistogram();
 
   signSummary.innerHTML = `
     <p>Message: ${escapeHtml(state.currentMessage)}</p>
@@ -310,102 +307,131 @@ async function signOnce(): Promise<void> {
   `;
 }
 
+function setBusy(busy: boolean): void {
+  state.runningHistogram = busy;
+  signOnceButton.disabled = busy;
+  regenKeyButton.disabled = busy;
+  run100.disabled = busy;
+  run1000.disabled = busy;
+  resetHist.disabled = busy;
+  presetSelect.disabled = busy;
+  runDistinguishabilityButton.disabled = busy;
+}
+
 async function runHistogramBatch(count: number): Promise<void> {
   if (state.runningHistogram) return;
-  state.runningHistogram = true;
-  run100.disabled = true;
-  run1000.disabled = true;
-  presetSelect.disabled = true;
+  setBusy(true);
+  try {
+    signSummary.innerHTML = `<p>Running ${count} signatures at ${state.currentPreset}...</p>`;
+    const stats = await collectIterationStatistics(count, {
+      preset: state.currentPreset,
+      onProgress: (done) => {
+        if (done < count) {
+          signSummary.innerHTML = `<p>Running ${state.currentPreset} batch: ${done} / ${count}...</p>`;
+        }
+      },
+    });
+    for (const c of stats.iterationCounts) {
+      state.iterationHistory.push(c);
+      state.histogramRuns += 1;
+    }
+    renderHistogram();
 
-  const msg = encoder.encode(state.currentMessage);
-  signSummary.innerHTML = `<p>Running ${count} signatures at ${state.currentPreset}...</p>`;
-  const stats = await collectIterationStatistics(count, state.keypair.secretKey, msg, {
-    preset: state.currentPreset,
-    onProgress: (done) => {
-      if (done < count) {
-        signSummary.innerHTML = `<p>Running ${state.currentPreset} batch: ${done} / ${count}...</p>`;
-      }
-    },
-  });
-  for (const c of stats.iterationCounts) {
-    state.iterationHistory.push(c);
-    state.histogramRuns += 1;
+    const totalRejections = Array.from(stats.rejectionReasonBreakdown.values()).reduce((a, b) => a + b, 0);
+    const breakdown = ['z_too_large', 'r0_too_large', 'ct0_too_large', 'hint_too_dense']
+      .map((k) => {
+        const v = stats.rejectionReasonBreakdown.get(k) ?? 0;
+        const pct = totalRejections > 0 ? (100 * v) / totalRejections : 0;
+        return `${k}: ${pct.toFixed(1)}%`;
+      })
+      .join(' | ');
+
+    signSummary.innerHTML = `
+      <p>Batch complete: ${count} signatures at <strong>${state.currentPreset}</strong>.</p>
+      <p>Mean: ${stats.mean.toFixed(2)} | Median: ${stats.median.toFixed(2)} | P90: ${stats.p90.toFixed(2)} | P99: ${stats.p99.toFixed(2)} | Max: ${stats.max}</p>
+      <p>${breakdown}</p>
+    `;
+  } catch (err) {
+    signSummary.innerHTML = `<p>Batch failed: ${escapeHtml(String((err as Error)?.message ?? err))}</p>`;
+  } finally {
+    setBusy(false);
   }
-  renderHistogram();
-
-  const totalRejections = Array.from(stats.rejectionReasonBreakdown.values()).reduce((a, b) => a + b, 0);
-  const breakdown = ['z_too_large', 'r0_too_large', 'ct0_too_large', 'hint_too_dense']
-    .map((k) => {
-      const v = stats.rejectionReasonBreakdown.get(k) ?? 0;
-      const pct = totalRejections > 0 ? (100 * v) / totalRejections : 0;
-      return `${k}: ${pct.toFixed(1)}%`;
-    })
-    .join(' | ');
-
-  signSummary.innerHTML = `
-    <p>Batch complete: ${count} signatures at <strong>${state.currentPreset}</strong>.</p>
-    <p>Mean: ${stats.mean.toFixed(2)} | Median: ${stats.median.toFixed(2)} | P90: ${stats.p90.toFixed(2)} | P99: ${stats.p99.toFixed(2)} | Max: ${stats.max}</p>
-    <p>${breakdown}</p>
-  `;
-
-  run100.disabled = false;
-  run1000.disabled = false;
-  presetSelect.disabled = false;
-  state.runningHistogram = false;
 }
 
 async function runDistinguishabilityTestAction(): Promise<void> {
-  runDistinguishabilityButton.disabled = true;
-  distinguishabilityOutput.textContent = 'Running 2 x 1000 signatures at ML-DSA-65...';
+  if (state.runningHistogram) return;
+  setBusy(true);
+  distinguishabilityOutput.textContent = 'Running 2 x 1000 simulated signatures at ML-DSA-65...';
+  try {
+    let done1 = 0;
+    let done2 = 0;
+    const render = (): void => {
+      distinguishabilityOutput.textContent = `Running 2 x 1000 simulated signatures at ML-DSA-65...\npopulation A: ${done1} / 1000\npopulation B: ${done2} / 1000`;
+    };
+    const [obs1, obs2] = await Promise.all([
+      collectTimingObservations(1000, {
+        preset: 'ML-DSA-65',
+        onProgress: (d) => { done1 = d; render(); },
+      }),
+      collectTimingObservations(1000, {
+        preset: 'ML-DSA-65',
+        onProgress: (d) => { done2 = d; render(); },
+      }),
+    ]);
 
-  const kp2 = ml_dsa65.keygen();
-  const messages = Array.from({ length: 16 }, (_, i) => encoder.encode(`message-${i}`));
-  let done1 = 0;
-  let done2 = 0;
-  const render = (): void => {
-    distinguishabilityOutput.textContent = `Running 2 x 1000 signatures at ML-DSA-65...\nkey 1: ${done1} / 1000\nkey 2: ${done2} / 1000`;
-  };
-  const [obs1, obs2] = await Promise.all([
-    collectTimingObservations(1000, state.keypair.secretKey, messages, {
-      preset: 'ML-DSA-65',
-      onProgress: (d) => { done1 = d; render(); },
-    }),
-    collectTimingObservations(1000, kp2.secretKey, messages, {
-      preset: 'ML-DSA-65',
-      onProgress: (d) => { done2 = d; render(); },
-    }),
-  ]);
-
-  const verdict = distinguishabilityTest(obs1, obs2);
-  distinguishabilityOutput.textContent = [
-    `KS statistic: ${verdict.ksStatistic.toFixed(4)}`,
-    `Distinguishable: ${verdict.distinguishable ? 'yes' : 'no'}`,
-    `Confidence: ${Math.round(verdict.confidenceLevel * 100)}%`,
-    verdict.note,
-    '',
-    'Note: both keys use the same simulated acceptance distribution,',
-    'so this output illustrates the FIPS 204 design intent rather',
-    'than measured noble signing times.',
-  ].join('\n');
-  runDistinguishabilityButton.disabled = false;
+    const verdict = distinguishabilityTest(obs1, obs2);
+    distinguishabilityOutput.textContent = [
+      'Both populations are drawn from the same simulated acceptance distribution,',
+      `so under H0 we expect ~${Math.round(verdict.alpha * 100)}% of runs to cross the threshold by chance.`,
+      '',
+      `KS statistic:    ${verdict.ksStatistic.toFixed(4)}`,
+      `alpha=${verdict.alpha} threshold: ${verdict.criticalValue.toFixed(4)}`,
+      `Result:          ${verdict.exceedsCritical ? 'exceeds threshold' : 'below threshold'}`,
+      '',
+      verdict.note,
+      '',
+      'This illustrates the FIPS 204 design intent (sk-independent',
+      'acceptance) — not a measurement of real noble signing times.',
+    ].join('\n');
+  } catch (err) {
+    distinguishabilityOutput.textContent = `Test failed: ${(err as Error)?.message ?? err}`;
+  } finally {
+    setBusy(false);
+  }
 }
 
 messageInput.addEventListener('input', () => {
   state.currentMessage = messageInput.value;
 });
 
-signOnceButton.addEventListener('click', async () => {
+async function triggerSignOnce(): Promise<void> {
+  if (state.runningHistogram || signOnceButton.disabled) return;
   signOnceButton.disabled = true;
   try {
     await signOnce();
+  } catch (err) {
+    signSummary.innerHTML = `<p>Sign failed: ${escapeHtml(String((err as Error)?.message ?? err))}</p>`;
   } finally {
     signOnceButton.disabled = false;
   }
+}
+
+messageInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    void triggerSignOnce();
+  }
+});
+
+signOnceButton.addEventListener('click', () => {
+  void triggerSignOnce();
 });
 
 regenKeyButton.addEventListener('click', () => {
+  if (state.runningHistogram) return;
   state.keypair = ml_dsa65.keygen();
-  signSummary.innerHTML = '<p>New ML-DSA-65 keypair generated.</p>';
+  iterationFeed.innerHTML = '';
+  signSummary.innerHTML = '<p>New ML-DSA-65 keypair generated. Click Sign Once to produce a fresh trace.</p>';
 });
 
 run100.addEventListener('click', async () => {
@@ -436,6 +462,24 @@ presetSelect.addEventListener('change', () => {
 runDistinguishabilityButton.addEventListener('click', async () => {
   await runDistinguishabilityTestAction();
 });
+
+const themeToggleButton = document.querySelector<HTMLButtonElement>('#theme-toggle');
+if (themeToggleButton) {
+  const updateLabel = (): void => {
+    const current = document.documentElement.getAttribute('data-theme') ?? 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    themeToggleButton.textContent = next === 'dark' ? 'Dark theme' : 'Light theme';
+    themeToggleButton.setAttribute('aria-label', `Switch to ${next} theme`);
+  };
+  updateLabel();
+  themeToggleButton.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') ?? 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateLabel();
+  });
+}
 
 renderHistogram();
 renderCheckExplanations();

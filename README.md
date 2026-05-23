@@ -2,6 +2,17 @@
 
 Browser-based explainer for ML-DSA rejection sampling: the Fiat-Shamir with Aborts loop that makes lattice signatures secure.
 
+[**Live demo →**](https://systemslibrarian.github.io/crypto-lab-dilithium-reject/)
+
+![ML-DSA Rejection Sampling Explorer — dark theme, showing iteration trace and histogram of iterations until acceptance](docs/screenshot.png)
+
+<details>
+<summary>Light theme</summary>
+
+![Light theme: same layout, light palette](docs/screenshot-light.png)
+
+</details>
+
 > "Whether therefore ye eat, or drink, or whatsoever ye do, do all to the glory of God."
 > 1 Corinthians 10:31
 
@@ -22,7 +33,7 @@ Highlights:
 
 The iteration feed in Exhibit 1 and the histogram in Exhibit 2 are a **didactic simulation calibrated to ML-DSA's published acceptance distribution**, not a fork of the real signing internals.
 
-- Acceptance per iteration is a coin flip with `p(accept)` set per preset (~0.31 for ML-DSA-44, ~0.26 for ML-DSA-65, ~0.22 for ML-DSA-87). The mean number of iterations therefore matches what FIPS 204 implementations report in practice.
+- Acceptance per iteration is a coin flip with `p(accept)` set per preset (~0.31 for ML-DSA-44, ~0.26 for ML-DSA-65, ~0.22 for ML-DSA-87). These are **illustrative values calibrated to the order-of-magnitude reported by published ML-DSA implementations**; treat them as the right shape of the distribution, not as measurements. The calibration is asserted by `src/instrumented-sign.test.ts`, which fails the build if mean iterations drift more than ±15% from `1/acceptance`.
 - When a candidate is rejected, the specific reason is sampled from the published mix (z dominates, r0 next, ct0 and hint rare). The displayed `||z||∞`, `||r0||∞`, `||c·t0||∞` values are positioned above/below their thresholds to be consistent with that reason; they are not computed from a live `y + c·s1` etc.
 - The actual signature shown as "valid" is produced by [`@noble/post-quantum`](https://www.npmjs.com/package/@noble/post-quantum)'s real ML-DSA implementation. The verification check uses the same library. That part is real.
 - `src/mldsa-primitives.ts` contains real implementations of `infinityNorm`, `highBits`/`lowBits`, `hintWeight`, and a SampleInBall variant; it is wired into the demo for the per-check explanation exhibit but does not drive the iteration feed.

@@ -1,4 +1,4 @@
-import { instrumentedSign, type PresetName } from './instrumented-sign';
+import { simulateRejectionTrace, type PresetName } from './instrumented-sign';
 import { uniform01 } from './mldsa-primitives';
 
 export interface TimingObservation {
@@ -33,24 +33,19 @@ function ksCriticalValue(n1: number, n2: number, alpha = 0.05): number {
 
 export async function collectTimingObservations(
   numSignatures: number,
-  secretKey: Uint8Array,
-  messages: Uint8Array[],
   options: { preset?: PresetName; onProgress?: (done: number) => void } = {},
 ): Promise<TimingObservation[]> {
-  if (messages.length === 0) throw new Error('messages must not be empty');
-
   const observations: TimingObservation[] = [];
   const chunkSize = 50;
   for (let i = 0; i < numSignatures; i += 1) {
-    const msg = messages[i % messages.length] ?? messages[0]!;
-    const result = await instrumentedSign(msg, secretKey, undefined, { preset: options.preset });
+    const trace = await simulateRejectionTrace({ preset: options.preset });
     const noise = (uniform01() - 0.5) * 0.06;
-    const observedTimeMs = Math.max(0, result.totalTimeMs + noise);
+    const observedTimeMs = Math.max(0, trace.totalTimeMs + noise);
 
     observations.push({
       signatureIndex: i,
       observedTimeMs,
-      inferredIterations: result.acceptedIteration,
+      inferredIterations: trace.acceptedIteration,
     });
 
     if (options.onProgress && (i + 1) % chunkSize === 0) {
@@ -66,9 +61,10 @@ export function distinguishabilityTest(
   sk1Observations: TimingObservation[],
   sk2Observations: TimingObservation[],
 ): {
-  distinguishable: boolean;
-  confidenceLevel: number;
+  exceedsCritical: boolean;
   ksStatistic: number;
+  criticalValue: number;
+  alpha: number;
   note: string;
 } {
   const s1 = sk1Observations.map((o) => o.inferredIterations);
@@ -76,23 +72,26 @@ export function distinguishabilityTest(
 
   if (s1.length === 0 || s2.length === 0) {
     return {
-      distinguishable: false,
-      confidenceLevel: 0,
+      exceedsCritical: false,
       ksStatistic: 0,
+      criticalValue: 0,
+      alpha: 0.05,
       note: 'Insufficient observations for KS test.',
     };
   }
 
+  const alpha = 0.05;
   const stat = ksStatistic(s1, s2);
-  const crit = ksCriticalValue(s1.length, s2.length, 0.05);
-  const distinguishable = stat > crit;
+  const crit = ksCriticalValue(s1.length, s2.length, alpha);
+  const exceedsCritical = stat > crit;
 
   return {
-    distinguishable,
-    confidenceLevel: distinguishable ? 0.95 : 0.05,
+    exceedsCritical,
     ksStatistic: stat,
-    note: distinguishable
-      ? 'Distributions appear statistically different at alpha=0.05.'
-      : 'Cannot distinguish key timing distributions at alpha=0.05.',
+    criticalValue: crit,
+    alpha,
+    note: exceedsCritical
+      ? `KS=${stat.toFixed(4)} exceeds the alpha=${alpha} critical value (${crit.toFixed(4)}). Under H0 (same distribution) this happens ~${Math.round(alpha * 100)}% of runs by chance.`
+      : `KS=${stat.toFixed(4)} is below the alpha=${alpha} critical value (${crit.toFixed(4)}). No evidence the two populations differ.`,
   };
 }

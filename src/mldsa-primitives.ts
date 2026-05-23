@@ -155,20 +155,16 @@ export function expandMask(
   const dv = new DataView(seed.buffer);
   dv.setUint32(rhoPrime.length, kappa, false);
 
-  let carry = 0;
-  let carryBits = 0;
-  const span = 2 * gamma1;
+  const seedLen = seed.length;
+  const bytes = new Uint8Array(n * 3);
+  crypto.getRandomValues(bytes);
 
+  const span = 2 * gamma1;
   for (let i = 0; i < n; i += 1) {
-    while (carryBits < 24) {
-      const seedByte = seed[(i + carryBits) % seed.length] ?? 0;
-      const chunk = randomUint32() ^ seedByte;
-      carry |= (chunk & 0xff) << carryBits;
-      carryBits += 8;
-    }
-    const val = carry & 0xffffff;
-    carry >>>= 24;
-    carryBits -= 24;
+    const b0 = (bytes[i * 3] ?? 0) ^ (seed[i % seedLen] ?? 0);
+    const b1 = (bytes[i * 3 + 1] ?? 0) ^ (seed[(i + 8) % seedLen] ?? 0);
+    const b2 = (bytes[i * 3 + 2] ?? 0) ^ (seed[(i + 16) % seedLen] ?? 0);
+    const val = b0 | (b1 << 8) | (b2 << 16);
     poly[i] = (val % span) - (gamma1 - 1);
   }
   return poly;

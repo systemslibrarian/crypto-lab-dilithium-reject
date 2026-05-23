@@ -9,13 +9,40 @@
       name="description"
       content="Interactive ML-DSA rejection sampling explorer with iteration-level pass/fail checks and timing analysis."
     />
+    <link rel="canonical" href="https://systemslibrarian.github.io/crypto-lab-dilithium-reject/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://systemslibrarian.github.io/crypto-lab-dilithium-reject/" />
+    <meta property="og:title" content="ML-DSA Rejection Sampling Explorer" />
+    <meta
+      property="og:description"
+      content="Fiat-Shamir with Aborts visualized iteration-by-iteration: each ML-DSA candidate is accepted or rejected against four explicit norm bounds."
+    />
+    <meta property="og:image" content="https://systemslibrarian.github.io/crypto-lab-dilithium-reject/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ML-DSA Rejection Sampling Explorer — hero with didactic-simulation disclaimer" />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ML-DSA Rejection Sampling Explorer" />
+    <meta
+      name="twitter:description"
+      content="Fiat-Shamir with Aborts visualized iteration-by-iteration: each ML-DSA candidate is accepted or rejected against four explicit norm bounds."
+    />
+    <meta name="twitter:image" content="https://systemslibrarian.github.io/crypto-lab-dilithium-reject/og-image.png" />
     <script>
-      const saved = localStorage.getItem('theme');
-      document.documentElement.setAttribute('data-theme', saved ?? 'dark');
+      (function () {
+        var saved = localStorage.getItem('theme');
+        var sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', saved || sys);
+      })();
     </script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Theme</button>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
