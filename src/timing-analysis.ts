@@ -1,3 +1,4 @@
+import { ksMaxGap } from './distributions';
 import { simulateRejectionTrace, type PresetName } from './instrumented-sign';
 import { uniform01 } from './mldsa-primitives';
 
@@ -8,22 +9,7 @@ export interface TimingObservation {
 }
 
 function ksStatistic(a: number[], b: number[]): number {
-  const as = [...a].sort((x, y) => x - y);
-  const bs = [...b].sort((x, y) => x - y);
-  let i = 0;
-  let j = 0;
-  let d = 0;
-
-  while (i < as.length && j < bs.length) {
-    const x = Math.min(as[i] ?? Number.POSITIVE_INFINITY, bs[j] ?? Number.POSITIVE_INFINITY);
-    while (i < as.length && (as[i] ?? Number.POSITIVE_INFINITY) <= x) i += 1;
-    while (j < bs.length && (bs[j] ?? Number.POSITIVE_INFINITY) <= x) j += 1;
-    const fa = i / as.length;
-    const fb = j / bs.length;
-    d = Math.max(d, Math.abs(fa - fb));
-  }
-
-  return d;
+  return ksMaxGap(a, b).statistic;
 }
 
 function ksCriticalValue(n1: number, n2: number, alpha = 0.05): number {

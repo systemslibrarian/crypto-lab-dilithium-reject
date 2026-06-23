@@ -1,13 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   ML_DSA_65,
   expandMask,
   hintWeight,
   highBits,
   infinityNorm,
+  isSeeded,
   lowBits,
   randomBytes,
   sampleInBall,
+  setSeed,
+  uniform01,
 } from './mldsa-primitives';
 
 describe('infinityNorm', () => {
@@ -75,6 +78,41 @@ describe('expandMask', () => {
       const v = small[i] ?? 0;
       expect(Math.abs(v)).toBeLessThanOrEqual(131072);
     }
+  });
+});
+
+describe('seedable RNG', () => {
+  afterEach(() => setSeed(null));
+
+  it('is off by default', () => {
+    expect(isSeeded()).toBe(false);
+  });
+
+  it('reproduces the same sequence for the same seed', () => {
+    setSeed(12345);
+    const a = [uniform01(), uniform01(), uniform01()];
+    setSeed(12345);
+    const b = [uniform01(), uniform01(), uniform01()];
+    expect(b).toEqual(a);
+  });
+
+  it('produces reproducible randomBytes and expandMask under a seed', () => {
+    setSeed(7);
+    const bytesA = Array.from(randomBytes(16));
+    const yA = Array.from(expandMask(randomBytes(64), 0, ML_DSA_65.gamma1, ML_DSA_65.n));
+    setSeed(7);
+    const bytesB = Array.from(randomBytes(16));
+    const yB = Array.from(expandMask(randomBytes(64), 0, ML_DSA_65.gamma1, ML_DSA_65.n));
+    expect(bytesB).toEqual(bytesA);
+    expect(yB).toEqual(yA);
+  });
+
+  it('different seeds give different sequences', () => {
+    setSeed(1);
+    const a = uniform01();
+    setSeed(2);
+    const b = uniform01();
+    expect(a).not.toBe(b);
   });
 });
 

@@ -30,7 +30,31 @@ function centeredModQ(x: number, q: number): number {
   return r > half ? r - q : r;
 }
 
+/**
+ * Optional deterministic mode. When a seed is set, all randomness in this
+ * module is derived from a mulberry32 PRNG so a trace can be reproduced
+ * exactly (the demo's "reproducible / deterministic" toggle). When the seed is
+ * null (the default) we use the cryptographic RNG.
+ */
+let seededState: number | null = null;
+
+export function setSeed(seed: number | null): void {
+  seededState = seed === null ? null : seed >>> 0;
+}
+
+export function isSeeded(): boolean {
+  return seededState !== null;
+}
+
+function nextSeeded(): number {
+  let t = (seededState = (seededState! + 0x6d2b79f5) >>> 0);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return (t ^ (t >>> 14)) >>> 0;
+}
+
 function randomUint32(): number {
+  if (seededState !== null) return nextSeeded();
   const out = new Uint32Array(1);
   crypto.getRandomValues(out);
   return out[0] ?? 0;
@@ -117,11 +141,7 @@ export function lowBits(r: number, alpha: number): number {
  * Real SampleInBall, structurally per FIPS 204 § 8.5.3.
  * Uses the didactic DeterministicStream above instead of SHAKE-256.
  */
-export function sampleInBall(
-  cTilde: Uint8Array,
-  tau: number,
-  n: number,
-): Polynomial {
+export function sampleInBall(cTilde: Uint8Array, tau: number, n: number): Polynomial {
   const poly = new Int32Array(n);
   const stream = new DeterministicStream(cTilde);
   let placed = 0;
@@ -143,12 +163,7 @@ export function sampleInBall(
  * full SHAKE implementation. The (rhoPrime, kappa) inputs are accepted
  * for API parity and folded in via XOR so changing them changes y.
  */
-export function expandMask(
-  rhoPrime: Uint8Array,
-  kappa: number,
-  gamma1: number,
-  n: number,
-): Polynomial {
+export function expandMask(rhoPrime: Uint8Array, kappa: number, gamma1: number, n: number): Polynomial {
   const poly = new Int32Array(n);
   const seed = new Uint8Array(rhoPrime.length + 4);
   seed.set(rhoPrime, 0);
@@ -156,8 +171,7 @@ export function expandMask(
   dv.setUint32(rhoPrime.length, kappa, false);
 
   const seedLen = seed.length;
-  const bytes = new Uint8Array(n * 3);
-  crypto.getRandomValues(bytes);
+  const bytes = randomBytes(n * 3);
 
   const span = 2 * gamma1;
   for (let i = 0; i < n; i += 1) {
@@ -182,6 +196,10 @@ export function hintWeight(hints: Polynomial[]): number {
 
 export function randomBytes(length: number): Uint8Array {
   const out = new Uint8Array(length);
+  if (seededState !== null) {
+    for (let i = 0; i < length; i += 1) out[i] = nextSeeded() & 0xff;
+    return out;
+  }
   crypto.getRandomValues(out);
   return out;
 }

@@ -5,6 +5,7 @@ import {
   type PresetName,
   instrumentedSign,
   simulateRejectionTrace,
+  simulateTraceOfLength,
 } from './instrumented-sign';
 
 const PRESET_NAMES = Object.keys(PRESETS) as PresetName[];
@@ -54,6 +55,37 @@ describe('simulation calibration', () => {
     expect(Math.abs((counts.r0_too_large ?? 0) / total - target.r0)).toBeLessThan(0.06);
     expect(Math.abs((counts.ct0_too_large ?? 0) / total - target.ct0)).toBeLessThan(0.06);
   }, 30000);
+});
+
+describe('simulateTraceOfLength', () => {
+  it('produces exactly the requested number of iterations, last accepted', () => {
+    const trace = simulateTraceOfLength(7, { preset: 'ML-DSA-65' });
+    expect(trace.iterations).toHaveLength(7);
+    expect(trace.acceptedIteration).toBe(7);
+    expect(trace.iterations.at(-1)?.result).toBe('ACCEPTED');
+    for (let i = 0; i < 6; i += 1) {
+      expect(trace.iterations[i]?.result).toBe('REJECTED');
+    }
+  });
+
+  it('clamps a request below 1 to a single accepted iteration', () => {
+    const trace = simulateTraceOfLength(0);
+    expect(trace.iterations).toHaveLength(1);
+    expect(trace.iterations[0]?.result).toBe('ACCEPTED');
+  });
+});
+
+describe('acceptance override', () => {
+  it('shifts the mean toward 1/p for an exploratory probability', async () => {
+    let total = 0;
+    const runs = 400;
+    for (let i = 0; i < runs; i += 1) {
+      total += (await simulateRejectionTrace({ acceptance: 0.5 })).acceptedIteration;
+    }
+    const observed = total / runs;
+    expect(observed).toBeGreaterThan(1.6);
+    expect(observed).toBeLessThan(2.4);
+  });
 });
 
 describe('instrumentedSign output', () => {

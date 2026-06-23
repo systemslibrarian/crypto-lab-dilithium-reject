@@ -1,0 +1,7 @@
+dist
+node_modules
+package-lock.json
+*.tsbuildinfo
+tmp-*
+# Managed shared-header block — edited via shared-header.html + reapply-header.py
+index.html
