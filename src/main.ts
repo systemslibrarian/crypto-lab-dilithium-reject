@@ -432,6 +432,7 @@ function setLastSignature(signature: Uint8Array, message: Uint8Array, verified: 
 
 async function signOnce(): Promise<void> {
   state.step = null;
+  stepButton.textContent = 'Step ▶';
   const msg = encoder.encode(state.currentMessage);
   iterationFeed.innerHTML = '';
   signSummary.innerHTML = '<p>Signing… drawing candidates until one passes all four checks.</p>';
@@ -489,15 +490,21 @@ async function stepOnce(): Promise<void> {
 
 async function showExampleTrace(k: number): Promise<void> {
   if (state.busy) return;
-  state.step = null;
-  const trace = simulateTraceOfLength(k, {
-    preset: state.currentPreset,
-    acceptance: state.customAcceptance ?? undefined,
-  });
-  signSummary.innerHTML = `<p>Example trace of length <strong>${k}</strong> (illustrative — constructed to accept on iteration ${k}, no real signature).</p>`;
-  tamperPanel.hidden = true;
-  exhibit1.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
-  await revealIterations(trace.iterations);
+  setBusy(true);
+  try {
+    state.step = null;
+    stepButton.textContent = 'Step ▶';
+    const trace = simulateTraceOfLength(k, {
+      preset: state.currentPreset,
+      acceptance: state.customAcceptance ?? undefined,
+    });
+    signSummary.innerHTML = `<p>Example trace of length <strong>${k}</strong> (illustrative — constructed to accept on iteration ${k}, no real signature).</p>`;
+    tamperPanel.hidden = true;
+    exhibit1.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+    await revealIterations(trace.iterations);
+  } finally {
+    setBusy(false);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -629,7 +636,7 @@ function renderHistogram(): void {
     <div><span class="k">Median</span><span class="v">${fmt.format(quantile(data, 0.5))}</span></div>
     <div><span class="k">P90</span><span class="v">${fmt.format(quantile(data, 0.9))}</span></div>
     <div><span class="k">P99</span><span class="v">${fmt.format(quantile(data, 0.99))}</span></div>
-    <div><span class="k">Max</span><span class="v">${fmt.format(data.length > 0 ? Math.max(...data) : 0)}</span></div>
+    <div><span class="k">Max</span><span class="v">${fmt.format(data.reduce((m, v) => (v > m ? v : m), 0))}</span></div>
   `;
 }
 
@@ -910,12 +917,14 @@ function setBusy(busy: boolean): void {
     runDistinguishabilityButton,
     measureButton,
     customPCheck,
-    pSlider,
     deterministicCheck,
-    seedInput,
   ]) {
     el.disabled = busy;
   }
+  // These two are only interactive when their toggle is on, so don't let
+  // setBusy(false) re-enable them unconditionally.
+  pSlider.disabled = busy || !customPCheck.checked;
+  seedInput.disabled = busy || !deterministicCheck.checked;
 }
 
 async function runHistogramBatch(count: number): Promise<void> {
