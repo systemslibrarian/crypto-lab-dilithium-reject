@@ -243,6 +243,12 @@ app.innerHTML = `
     Real signatures &amp; tamper test by <a href="https://github.com/paulmillr/noble-post-quantum" target="_blank" rel="noopener">@noble/post-quantum</a>${nobleVersion ? ` v${nobleVersion}` : ''}
     · <a href="https://github.com/systemslibrarian/crypto-lab-dilithium-reject/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
     · <a href="https://github.com/systemslibrarian/crypto-lab-dilithium-reject" target="_blank" rel="noopener">source</a>
+    <br>Related demos:
+    <a href="https://systemslibrarian.github.io/crypto-lab-dilithium-seal/" target="_blank" rel="noopener">crypto-lab-dilithium-seal</a>
+    · <a href="https://systemslibrarian.github.io/crypto-lab-falcon-seal/" target="_blank" rel="noopener">crypto-lab-falcon-seal</a>
+    · <a href="https://systemslibrarian.github.io/crypto-lab-sphincs-ledger/" target="_blank" rel="noopener">crypto-lab-sphincs-ledger</a>
+    · <a href="https://systemslibrarian.github.io/crypto-lab-hybrid-sign/" target="_blank" rel="noopener">crypto-lab-hybrid-sign</a>
+    · <a href="https://systemslibrarian.github.io/crypto-lab-kyber-vault/" target="_blank" rel="noopener">crypto-lab-kyber-vault</a>
   </footer>
 </main>
 `;
