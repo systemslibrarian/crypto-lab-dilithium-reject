@@ -1,22 +1,6 @@
 # crypto-lab-dilithium-reject
 
-Browser-based explainer for ML-DSA rejection sampling: the Fiat-Shamir with Aborts loop that makes lattice signatures secure.
-
 [![CI](https://github.com/systemslibrarian/crypto-lab-dilithium-reject/actions/workflows/ci.yml/badge.svg)](https://github.com/systemslibrarian/crypto-lab-dilithium-reject/actions/workflows/ci.yml)
-
-[**Live demo →**](https://systemslibrarian.github.io/crypto-lab-dilithium-reject/)
-
-![ML-DSA Rejection Sampling Explorer — dark theme, showing the per-check iteration trace and the histogram of iterations until acceptance with a theoretical geometric overlay](docs/screenshot.png)
-
-<details>
-<summary>Light theme</summary>
-
-![Light theme: same layout, light palette](docs/screenshot-light.png)
-
-</details>
-
-> "Whether therefore ye eat, or drink, or whatsoever ye do, do all to the glory of God."
-> 1 Corinthians 10:31
 
 ## What It Is
 
@@ -42,6 +26,64 @@ Highlights — **real cryptography** (via [`@noble/post-quantum`](https://www.np
 
 Plus: comparison table across Ed25519/ECDSA/ML-DSA/SLH-DSA/FALCON/LMS, an exhibit explaining why each check exists in FIPS 204, a symbols glossary with further-reading links, dark/light themes (AA/AAA contrast), keyboard + screen-reader support (verified by an axe-core test), and `prefers-reduced-motion` handling.
 
+## When to Use It
+
+Use this demo when you need to:
+
+- teach why ML-DSA signing time is variable by design
+- explain Fiat-Shamir with Aborts in lattice signatures
+- show that rejection is a security feature, not an implementation bug
+- discuss timing side-channel risk tradeoffs in post-quantum signatures
+- compare ML-DSA timing behavior with other signature families
+
+Do not use this project as production signing code. For production, use maintained, hardened libraries and platform-specific side-channel countermeasures.
+
+## Live Demo
+
+**[systemslibrarian.github.io/crypto-lab-dilithium-reject](https://systemslibrarian.github.io/crypto-lab-dilithium-reject/)**
+
+The page streams the ML-DSA signing rejection loop iteration by iteration, plots a histogram of iterations-until-acceptance against the theoretical geometric distribution, breaks down rejection reasons, and runs a KS distinguishability test for sk-independent timing. Exhibit 3 times thousands of real `ml_dsa65.sign` calls and a tamper test flips a bit so real `ml_dsa65.verify` rejects it.
+
+![ML-DSA Rejection Sampling Explorer — dark theme, showing the per-check iteration trace and the histogram of iterations until acceptance with a theoretical geometric overlay](docs/screenshot.png)
+
+<details>
+<summary>Light theme</summary>
+
+![Light theme: same layout, light palette](docs/screenshot-light.png)
+
+</details>
+
+## What Can Go Wrong
+
+- Variable signing time can become a side-channel if deployment hardening is weak.
+- Worst-case retries matter operationally; FIPS 204 permits bounded loops with failure return.
+- Rejection-loop timing is not the only leak source; arithmetic and memory access patterns also matter.
+- Deterministic mode has reproducibility benefits but different timing-privacy tradeoffs.
+- Different ML-DSA parameter sets shift acceptance distributions; the histogram preset selector illustrates this.
+
+## Real-World Usage
+
+Fiat-Shamir with Aborts was introduced by Vadim Lyubashevsky (ASIACRYPT 2009) and is the core idea behind practical lattice signatures like CRYSTALS-Dilithium and standardized ML-DSA.
+
+NIST selected Dilithium in 2022, then published FIPS 204 in 2024. The standardized ML-DSA design keeps rejection as a deliberate mechanism to preserve signature security, while implementations must manage the operational and side-channel consequences of variable-time signing loops.
+
+## How to Run Locally
+
+```bash
+git clone https://github.com/systemslibrarian/crypto-lab-dilithium-reject
+cd crypto-lab-dilithium-reject
+npm install
+npm run dev
+```
+
+## Related Demos
+
+- [crypto-lab-dilithium-seal](https://systemslibrarian.github.io/crypto-lab-dilithium-seal/) — the same ML-DSA primitive applied to signing and document sealing.
+- [crypto-lab-falcon-seal](https://systemslibrarian.github.io/crypto-lab-falcon-seal/) — Falcon (FN-DSA), the other lattice signature standardized by NIST.
+- [crypto-lab-sphincs-ledger](https://systemslibrarian.github.io/crypto-lab-sphincs-ledger/) — SLH-DSA (FIPS 205), the hash-based PQC signature alternative.
+- [crypto-lab-hybrid-sign](https://systemslibrarian.github.io/crypto-lab-hybrid-sign/) — composite Ed25519 + ML-DSA-65 signatures for migration.
+- [crypto-lab-kyber-vault](https://systemslibrarian.github.io/crypto-lab-kyber-vault/) — ML-KEM (FIPS 203), the lattice KEM companion to ML-DSA.
+
 ## How This Demo Works (Important)
 
 The iteration feed in Exhibit 1 and the histogram in Exhibit 2 are a **didactic simulation calibrated to ML-DSA's published acceptance distribution**, not a fork of the real signing internals.
@@ -57,19 +99,7 @@ This separation is deliberate: instrumenting `@noble/post-quantum`'s signing loo
 
 If you need bit-exact internal traces of real ML-DSA signing, use a reference implementation that exposes per-iteration hooks (e.g. NIST's C reference) rather than this demo.
 
-## When to Use It
-
-Use this demo when you need to:
-
-- teach why ML-DSA signing time is variable by design
-- explain Fiat-Shamir with Aborts in lattice signatures
-- show that rejection is a security feature, not an implementation bug
-- discuss timing side-channel risk tradeoffs in post-quantum signatures
-- compare ML-DSA timing behavior with other signature families
-
-Do not use this project as production signing code. For production, use maintained, hardened libraries and platform-specific side-channel countermeasures.
-
-## Install and Run
+## Build & Scripts
 
 ```bash
 npm install
@@ -96,24 +126,12 @@ npm test
 - `src/timing-analysis.test.ts` — the KS distinguishability verdict.
 - `src/app.dom.test.ts` — renders the whole app in jsdom and asserts there are **no serious/critical accessibility violations** (axe-core), plus that every primary control is wired.
 
-## Live Demo
-
-https://systemslibrarian.github.io/crypto-lab-dilithium-reject/
-
-## What Can Go Wrong (in real deployments)
-
-- Variable signing time can become a side-channel if deployment hardening is weak.
-- Worst-case retries matter operationally; FIPS 204 permits bounded loops with failure return.
-- Rejection-loop timing is not the only leak source; arithmetic and memory access patterns also matter.
-- Deterministic mode has reproducibility benefits but different timing-privacy tradeoffs.
-- Different ML-DSA parameter sets shift acceptance distributions; the histogram preset selector illustrates this.
-
-## Real-World Usage
-
-Fiat-Shamir with Aborts was introduced by Vadim Lyubashevsky (ASIACRYPT 2009) and is the core idea behind practical lattice signatures like CRYSTALS-Dilithium and standardized ML-DSA.
-
-NIST selected Dilithium in 2022, then published FIPS 204 in 2024. The standardized ML-DSA design keeps rejection as a deliberate mechanism to preserve signature security, while implementations must manage the operational and side-channel consequences of variable-time signing loops.
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+*One of 60+ browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
+
+*"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
