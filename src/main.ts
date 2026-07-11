@@ -1,14 +1,11 @@
 import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
 import './style.css';
 import pkg from '../package.json';
-import {
-  PRESETS,
-  type IterationRecord,
-  type PresetName,
-  type SigningResult,
-  instrumentedSign,
-  simulateTraceOfLength,
-} from './instrumented-sign';
+import { PRESETS, type IterationRecord, type PresetName, simulateTraceOfLength } from './instrumented-sign';
+import { type MlDsaPresetName, type RealIterationRecord } from './real-sign';
+import { downloadChartPng, downloadChartSvg, downloadCsv } from './chart-export';
+import { buildShareUrl, parseUrlState } from './url-state';
+import { createTour, type TourStep } from './tour';
 import { ML_DSA_65, expandMask, lowBits, randomBytes, randomInt, sampleInBall, setSeed } from './mldsa-primitives';
 import {
   type Bin,
@@ -32,6 +29,14 @@ interface KsVerdict {
   note: string;
 }
 
+/** What the worker returns for one real instrumented signing run. */
+interface SignTracePayload {
+  signature: Uint8Array;
+  iterations: RealIterationRecord[];
+  acceptedIteration: number;
+  totalTimeMs: number;
+}
+
 interface AppState {
   keypair: { secretKey: Uint8Array; publicKey: Uint8Array };
   currentMessage: string;
@@ -43,9 +48,11 @@ interface AppState {
   customAcceptance: number | null;
   deterministic: boolean;
   seed: number;
-  lastSig: { signature: Uint8Array; message: Uint8Array } | null;
-  step: { trace: SigningResult; index: number; verified: boolean } | null;
+  lastSig: { signature: Uint8Array; message: Uint8Array; publicKey: Uint8Array } | null;
+  step: { trace: SignTracePayload; index: number; verified: boolean; publicKey: Uint8Array } | null;
   realTimes: number[];
+  ksMode: 'real' | 'leaky';
+  leakGame: { leakyIs: 'a' | 'b'; honestP: number; leakyP: number; verdict: KsVerdict } | null;
 }
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -56,20 +63,25 @@ const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 const intFmt = new Intl.NumberFormat('en-US');
 const nobleVersion = (pkg.dependencies?.['@noble/post-quantum'] ?? '').replace(/[^0-9.]/g, '');
 
+// Shared links restore preset, seeded mode, message, and exploratory p.
+const urlState = parseUrlState(window.location.search);
+
 const state: AppState = {
   keypair: ml_dsa65.keygen(),
-  currentMessage: 'Transfer $1000 to Bob',
+  currentMessage: urlState.message ?? 'Transfer $1000 to Bob',
   iterationHistory: [],
   histogramRuns: 0,
   busy: false,
-  currentPreset: 'ML-DSA-65',
+  currentPreset: (urlState.preset as PresetName | undefined) ?? 'ML-DSA-65',
   reasonBreakdown: new Map(),
-  customAcceptance: null,
-  deterministic: false,
-  seed: 42,
+  customAcceptance: urlState.customAcceptance ?? null,
+  deterministic: urlState.deterministic ?? false,
+  seed: urlState.seed ?? 42,
   lastSig: null,
   step: null,
   realTimes: [],
+  ksMode: 'real',
+  leakGame: null,
 };
 
 const REASONS = [
@@ -91,15 +103,18 @@ app.innerHTML = `
       <span>Security through rejection</span>
     </div>
     <p class="sim-note" role="note">
-      <strong>Didactic simulation.</strong>
-      The iteration trace and histograms in Exhibits 1–2 are calibrated to ML-DSA's published acceptance distribution; they are not a fork of the production signing loop. The valid signature, the <strong>tamper test</strong>, and the <strong>measured timings in Exhibit 3</strong> use <code>@noble/post-quantum</code>'s real ML-DSA-65. See the
-      <a href="https://github.com/systemslibrarian/crypto-lab-dilithium-reject#how-this-demo-works-important">README</a> for the exact boundary.
+      <strong>Real instrumented loop.</strong>
+      The iteration trace, the histogram, and the KS test run the <em>actual</em> FIPS 204 signing loop — <code>@noble/post-quantum</code>'s implementation, vendored with a per-iteration probe. Every norm, rejection reason, and κ value is computed from the real y + c·s₁ arithmetic, and the test suite asserts the probed loop still produces <strong>byte-identical signatures</strong> to the untouched library. Only the clearly marked “exploratory p” slider and the “hypothetical leaky signer” scenario are simulations. See the
+      <a href="https://github.com/systemslibrarian/crypto-lab-dilithium-reject#how-this-demo-works-important">README</a> for details.
     </p>
+    <div class="controls hero-actions">
+      <button id="tour-start" type="button">▶ Start guided tour</button>
+    </div>
   </header>
 
   <section class="card">
     <h2>Exhibit 1: Watch the Loop</h2>
-    <p class="meta">Fixed at ML-DSA-65. Each run streams one didactic trace (candidates drawn until one passes all four checks) and produces one real noble signature you can then tamper with.</p>
+    <p class="meta">Fixed at ML-DSA-65. Each run executes the <strong>real</strong> FIPS 204 rejection loop and streams every iteration it actually performed — the norms shown are computed from the live y + c·s₁ arithmetic, and the signature is the loop's own output (verify and tamper with it below).</p>
     <div class="controls">
       <label for="message-input">Message</label>
       <input id="message-input" value="Transfer $1000 to Bob" aria-describedby="message-help" />
@@ -111,7 +126,9 @@ app.innerHTML = `
     <div class="controls subtle">
       <label class="inline-check" for="deterministic"><input type="checkbox" id="deterministic" /> Reproducible (seeded)</label>
       <label class="inline-check seed-field" for="seed" hidden>seed <input type="number" id="seed" value="42" min="0" step="1" /></label>
-      <span class="meta det-note" hidden>Same seed reproduces the exact trace and signature — the idea behind FIPS 204 deterministic mode.</span>
+      <span class="meta det-note" hidden>The seed derives both the keypair and the signing randomness, so the same seed replays the exact real trace and signature — shareable via the link button.</span>
+      <button id="copy-link" type="button">Copy shareable link</button>
+      <span id="copy-link-result" class="meta" role="status" aria-live="polite"></span>
     </div>
     <p class="meta">Secret key: <span class="secret" aria-hidden="true">██████████████████████████████</span></p>
     <div id="sign-summary" class="summary" role="status" aria-live="polite"></div>
@@ -126,7 +143,7 @@ app.innerHTML = `
 
   <section class="card">
     <h2>Exhibit 2: Histogram of Iterations</h2>
-    <p class="meta">Iteration count until acceptance is a <strong>geometric random variable</strong>: each draw is an independent coin flip with the same accept probability. The bars are the empirical distribution; the dotted line is the theoretical geometric PMF. They should track each other, with the mean at 1/p. Tip: click a bar to see an example trace of that length.</p>
+    <p class="meta">Each bar counts <strong>real signatures</strong>: the batch runs the actual instrumented signing loop and records how many candidates each signature needed. Iteration count until acceptance behaves like a <strong>geometric random variable</strong> — each draw is (approximately) an independent trial with the same accept probability — so the bars should track the dotted geometric PMF with mean 1/p̂, where p̂ is <em>measured</em> from the batch. Tip: click a bar to hunt for a real trace of exactly that length.</p>
     <div class="controls">
       <label for="preset-select">Preset</label>
         <select id="preset-select" aria-label="ML-DSA parameter preset">
@@ -139,9 +156,10 @@ app.innerHTML = `
       <button id="reset-hist" type="button">Reset</button>
     </div>
     <div class="controls subtle">
-      <label class="inline-check" for="custom-p"><input type="checkbox" id="custom-p" /> Custom p (exploratory)</label>
-      <input type="range" id="p-slider" min="0.05" max="0.6" step="0.01" value="0.26" disabled aria-label="Exploratory acceptance probability" />
+      <label class="inline-check" for="custom-p"><input type="checkbox" id="custom-p" /> Custom p (exploratory simulation)</label>
+      <input type="range" id="p-slider" min="0.05" max="0.6" step="0.01" value="0.2" disabled aria-label="Exploratory acceptance probability" />
       <span id="p-readout" class="p-readout meta"></span>
+      <label class="inline-check" for="overlay-presets"><input type="checkbox" id="overlay-presets" /> Compare presets (theory)</label>
     </div>
     <div class="chart-legend" aria-hidden="true">
       <span><span class="lg-swatch lg-bar"></span>observed</span>
@@ -150,6 +168,13 @@ app.innerHTML = `
     </div>
     <div id="histogram" class="histogram" role="group" aria-live="polite" aria-label="Histogram of iterations until acceptance"></div>
     <div id="stats" class="stats-grid" role="group" aria-label="Histogram summary statistics"></div>
+    <p id="tail-note" class="meta tail-note"></p>
+    <div class="controls subtle export-row">
+      <span class="meta">Export:</span>
+      <button id="export-hist-svg" type="button" class="mini-btn">SVG</button>
+      <button id="export-hist-png" type="button" class="mini-btn">PNG</button>
+      <button id="export-hist-csv" type="button" class="mini-btn">CSV</button>
+    </div>
     <div id="reason-breakdown" class="reason-breakdown"></div>
   </section>
 
@@ -162,6 +187,12 @@ app.innerHTML = `
     </div>
     <div id="realtime-hist" class="histogram"></div>
     <div id="realtime-stats" class="stats-grid" role="group" aria-label="Real timing summary statistics"></div>
+    <div class="controls subtle export-row">
+      <span class="meta">Export:</span>
+      <button id="export-times-svg" type="button" class="mini-btn">SVG</button>
+      <button id="export-times-png" type="button" class="mini-btn">PNG</button>
+      <button id="export-times-csv" type="button" class="mini-btn">CSV</button>
+    </div>
   </section>
 
   <section class="card deep-dive">
@@ -194,9 +225,24 @@ app.innerHTML = `
 
   <section class="card">
     <h2>Exhibit 6: Is Iteration Count Distinguishable?</h2>
-    <p class="meta">The design intent of FIPS 204 is that the acceptance distribution does not depend on the secret key. This test draws two independent populations from the same calibrated simulation — think of them as timing traces from two different signers — and overlays their empirical CDFs. Under H0 they should coincide; the largest vertical gap is the Kolmogorov–Smirnov statistic.</p>
-    <button id="run-distinguishability" type="button">Run KS Distinguishability Test (2 × N=1000)</button>
+    <p class="meta">The design intent of FIPS 204 is that the acceptance distribution does not depend on the secret key. The <strong>faithful scenario</strong> measures this on real data: two freshly generated ML-DSA-65 keys each produce a population of real signatures, and their iteration-count CDFs are overlaid — the largest vertical gap is the Kolmogorov–Smirnov statistic, which should stay below the threshold. The <strong>broken scenario</strong> is the positive control: a <em>hypothetical</em> (simulated) implementation whose acceptance probability depends on the secret key. One population comes from it — can you tell which, before the KS test does?</p>
+    <div class="controls">
+      <label for="ks-mode">Scenario</label>
+      <select id="ks-mode" aria-label="Distinguishability scenario">
+        <option value="real" selected>Faithful — two real ML-DSA-65 signers</option>
+        <option value="leaky">Broken (hypothetical) — one signer leaks</option>
+      </select>
+      <button id="run-distinguishability" type="button">Run KS test</button>
+    </div>
     <div id="ks-chart" class="ks-chart"></div>
+    <div id="leak-game" class="leak-game" hidden>
+      <p><strong>One of these populations came from the leaky implementation.</strong> Read the CDFs: which signer rejects more (takes more iterations)?</p>
+      <div class="controls">
+        <button id="guess-a" type="button">Population A is leaky</button>
+        <button id="guess-b" type="button">Population B is leaky</button>
+      </div>
+      <p id="leak-reveal" class="meta" role="status" aria-live="polite"></p>
+    </div>
     <pre id="distinguishability-output" class="dist-output" role="status" aria-live="polite"></pre>
     <h3 class="mini-h">Production mitigations</h3>
     <ul class="notes">
@@ -293,6 +339,16 @@ const runDistinguishabilityButton = $<HTMLButtonElement>('#run-distinguishabilit
 const distinguishabilityOutput = $<HTMLPreElement>('#distinguishability-output');
 const ksChart = $<HTMLDivElement>('#ks-chart');
 const exhibit1 = $<HTMLElement>('.lab > section.card:nth-of-type(1)');
+const tourStartButton = $<HTMLButtonElement>('#tour-start');
+const copyLinkButton = $<HTMLButtonElement>('#copy-link');
+const copyLinkResult = $<HTMLSpanElement>('#copy-link-result');
+const overlayPresetsCheck = $<HTMLInputElement>('#overlay-presets');
+const tailNote = $<HTMLParagraphElement>('#tail-note');
+const ksModeSelect = $<HTMLSelectElement>('#ks-mode');
+const leakGamePanel = $<HTMLDivElement>('#leak-game');
+const guessAButton = $<HTMLButtonElement>('#guess-a');
+const guessBButton = $<HTMLButtonElement>('#guess-b');
+const leakReveal = $<HTMLParagraphElement>('#leak-reveal');
 
 // --- worker client ---
 let worker: Worker | null = null;
@@ -342,16 +398,83 @@ function prefersReducedMotion(): boolean {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-function activeAcceptance(): number {
-  return state.customAcceptance ?? PRESETS[state.currentPreset].acceptance;
+/**
+ * Acceptance probability measured from the accumulated real batch (signatures
+ * per candidate drawn) — the per-iteration MLE. Null until data exists or in
+ * exploratory simulation mode.
+ */
+function measuredAcceptance(): number | null {
+  if (state.customAcceptance !== null) return null;
+  const totalIterations = state.iterationHistory.reduce((a, b) => a + b, 0);
+  return state.histogramRuns > 0 && totalIterations > 0 ? state.histogramRuns / totalIterations : null;
 }
-async function withSeedMaybe<T>(fn: () => Promise<T>): Promise<T> {
-  if (state.deterministic) setSeed(state.seed);
-  try {
-    return await fn();
-  } finally {
-    if (state.deterministic) setSeed(null);
+function activeAcceptance(): number {
+  return state.customAcceptance ?? measuredAcceptance() ?? PRESETS[state.currentPreset].acceptance;
+}
+
+/**
+ * Derive (keypair, extraEntropy) for one signing run. In seeded mode both come
+ * from the demo PRNG, so the same seed replays the exact real trace and
+ * signature; otherwise the session keypair and the CSPRNG are used. (Seeded
+ * entropy is intentionally non-cryptographic — that IS the reproducibility
+ * feature, never a pattern for production signing.)
+ */
+function signingInputs(): {
+  secretKey: Uint8Array;
+  publicKey: Uint8Array;
+  extraEntropy: Uint8Array | undefined;
+} {
+  if (!state.deterministic) {
+    return { secretKey: state.keypair.secretKey, publicKey: state.keypair.publicKey, extraEntropy: undefined };
   }
+  setSeed(state.seed);
+  const keySeed = randomBytes(32);
+  const extraEntropy = randomBytes(32);
+  setSeed(null);
+  const kp = ml_dsa65.keygen(keySeed);
+  return { secretKey: kp.secretKey, publicKey: kp.publicKey, extraEntropy };
+}
+
+/** Run one real instrumented signature in the worker. */
+async function runRealSign(): Promise<{
+  payload: SignTracePayload;
+  publicKey: Uint8Array;
+  verified: boolean;
+  msg: Uint8Array;
+}> {
+  const msg = encoder.encode(state.currentMessage);
+  const { secretKey, publicKey, extraEntropy } = signingInputs();
+  const payload = await runJob<SignTracePayload>({
+    kind: 'sign',
+    preset: 'ML-DSA-65' satisfies MlDsaPresetName,
+    message: msg,
+    secretKey,
+    extraEntropy,
+  });
+  const verified = ml_dsa65.verify(payload.signature, msg, publicKey);
+  return { payload, publicKey, verified, msg };
+}
+
+/** Adapt a simulated iteration record to the real-record shape the feed renders. */
+function simToReal(rec: IterationRecord): RealIterationRecord {
+  const toCheck = (s: { infNorm: number; checkThreshold: number; passesCheck: boolean } | null) =>
+    s ? { value: s.infNorm, threshold: s.checkThreshold, pass: s.passesCheck } : null;
+  return {
+    kappa: rec.kappa,
+    yInf: rec.yStats.infNorm,
+    cTildeHex: rec.cTildeFingerprint,
+    z: toCheck(rec.zStats),
+    r0: toCheck(rec.r0Stats),
+    ct0: toCheck(rec.ct0Stats),
+    hint: {
+      value: rec.hintWeight ?? 0,
+      threshold: rec.hintThreshold,
+      pass: (rec.hintWeight ?? 0) <= rec.hintThreshold,
+    },
+    result: rec.result,
+    rejectionReason: rec.rejectionReason,
+    timeMs: rec.timeMs,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -367,42 +490,19 @@ function checkRow(label: string, value: string, pass: boolean, cls: string): str
     </li>`;
 }
 
-function renderIteration(record: IterationRecord, idx: number): void {
+function renderIteration(record: RealIterationRecord, idx: number): void {
   const row = document.createElement('article');
   row.className = `iteration ${record.result === 'ACCEPTED' ? 'accepted' : 'rejected'} reason-${record.rejectionReason ?? 'accepted'}`;
 
   const statusLabel = record.result === 'ACCEPTED' ? 'ACCEPTED' : `REJECTED · ${record.rejectionReason ?? ''}`;
-  const zPass = record.zStats?.passesCheck ?? true;
-  const r0Pass = record.r0Stats?.passesCheck ?? true;
-  const ct0Pass = record.ct0Stats?.passesCheck ?? true;
-  const hintPass = (record.hintWeight ?? 0) <= record.hintThreshold;
+  const checkVal = (c: { value: number; threshold: number } | null): string =>
+    c ? `${intFmt.format(c.value)} / ${intFmt.format(c.threshold)}` : '—';
 
   const checks = [
-    record.zStats
-      ? checkRow(
-          '‖z‖∞ &lt; γ₁ − β',
-          `${intFmt.format(record.zStats.infNorm)} / ${intFmt.format(record.zStats.checkThreshold)}`,
-          zPass,
-          'z',
-        )
-      : '',
-    record.r0Stats
-      ? checkRow(
-          '‖r₀‖∞ &lt; γ₂ − β',
-          `${intFmt.format(record.r0Stats.infNorm)} / ${intFmt.format(record.r0Stats.checkThreshold)}`,
-          r0Pass,
-          'r0',
-        )
-      : '',
-    record.ct0Stats
-      ? checkRow(
-          '‖c·t₀‖∞ &lt; γ₂',
-          `${intFmt.format(record.ct0Stats.infNorm)} / ${intFmt.format(record.ct0Stats.checkThreshold)}`,
-          ct0Pass,
-          'ct0',
-        )
-      : '',
-    checkRow('wt(h) ≤ ω', `${record.hintWeight ?? 0} / ${record.hintThreshold}`, hintPass, 'hint'),
+    record.z ? checkRow('‖z‖∞ &lt; γ₁ − β', checkVal(record.z), record.z.pass, 'z') : '',
+    record.r0 ? checkRow('‖r₀‖∞ &lt; γ₂ − β', checkVal(record.r0), record.r0.pass, 'r0') : '',
+    record.ct0 ? checkRow('‖c·t₀‖∞ &lt; γ₂', checkVal(record.ct0), record.ct0.pass, 'ct0') : '',
+    record.hint ? checkRow('wt(h) ≤ ω', checkVal(record.hint), record.hint.pass, 'hint') : '',
   ].join('');
 
   row.innerHTML = `
@@ -410,13 +510,13 @@ function renderIteration(record: IterationRecord, idx: number): void {
       <h3>Iteration ${idx + 1}</h3>
       <span class="status-pill status-${record.result === 'ACCEPTED' ? 'accepted' : 'rejected'}">${statusLabel}</span>
     </div>
-    <p class="iter-sub">κ = ${record.kappa} · challenge weight ${record.sampleInBall.nonzeroPositions.length} · c̃ ${record.cTildeFingerprint} · ‖y‖∞ = ${intFmt.format(record.yStats.infNorm)}</p>
+    <p class="iter-sub">κ = ${record.kappa} · c̃ ${record.cTildeHex} · ‖y‖∞ = ${intFmt.format(record.yInf)}</p>
     <ul class="checks">${checks}</ul>
   `;
   iterationFeed.append(row);
 }
 
-async function revealIterations(records: IterationRecord[]): Promise<void> {
+async function revealIterations(records: RealIterationRecord[]): Promise<void> {
   iterationFeed.innerHTML = '';
   const reduce = prefersReducedMotion();
   const perStep = records.length > 14 ? 55 : 220;
@@ -429,8 +529,8 @@ async function revealIterations(records: IterationRecord[]): Promise<void> {
   }
 }
 
-function setLastSignature(signature: Uint8Array, message: Uint8Array, verified: boolean): void {
-  state.lastSig = { signature, message };
+function setLastSignature(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array, verified: boolean): void {
+  state.lastSig = { signature, message, publicKey };
   tamperPanel.hidden = false;
   tamperResult.textContent = verified ? 'original signature verifies ✓' : 'original verifies ✗';
   tamperResult.className = `tamper-result ${verified ? 'ok' : 'bad'}`;
@@ -439,36 +539,29 @@ function setLastSignature(signature: Uint8Array, message: Uint8Array, verified: 
 async function signOnce(): Promise<void> {
   state.step = null;
   stepButton.textContent = 'Step ▶';
-  const msg = encoder.encode(state.currentMessage);
   iterationFeed.innerHTML = '';
-  signSummary.innerHTML = '<p>Signing… drawing candidates until one passes all four checks.</p>';
+  signSummary.innerHTML =
+    '<p>Signing with the real ML-DSA-65 loop… drawing candidates until one passes all four checks.</p>';
 
-  const result = await withSeedMaybe(() =>
-    instrumentedSign(msg, state.keypair.secretKey, undefined, { preset: 'ML-DSA-65' }),
-  );
-  const verified = ml_dsa65.verify(result.signature, msg, state.keypair.publicKey);
+  const { payload, publicKey, verified, msg } = await runRealSign();
 
-  await revealIterations(result.iterations);
+  await revealIterations(payload.iterations);
 
-  const rejections = result.acceptedIteration - 1;
-  const seedNote = state.deterministic ? ` · seed ${state.seed}` : '';
+  const rejections = payload.acceptedIteration - 1;
+  const seedNote = state.deterministic ? ` · seed ${state.seed} (seeded keypair)` : '';
   signSummary.innerHTML = `
     <p>Message: ${escapeHtml(state.currentMessage)}${seedNote}</p>
-    <p>Accepted on iteration <strong>${result.acceptedIteration}</strong> after <strong>${rejections}</strong> rejection${rejections === 1 ? '' : 's'} · simulated trace time <strong>${result.totalTimeMs.toFixed(3)} ms</strong></p>
-    <p>Signature verifies via noble ML-DSA-65: <strong>${verified ? 'yes' : 'no'}</strong></p>
+    <p>Accepted on iteration <strong>${payload.acceptedIteration}</strong> after <strong>${rejections}</strong> rejection${rejections === 1 ? '' : 's'} · real loop time <strong>${payload.totalTimeMs.toFixed(2)} ms</strong> (measured in the worker)</p>
+    <p>Signature produced by the instrumented loop verifies via untouched noble ML-DSA-65: <strong>${verified ? 'yes' : 'no'}</strong></p>
   `;
-  setLastSignature(result.signature, msg, verified);
+  setLastSignature(payload.signature, msg, publicKey, verified);
 }
 
 async function stepOnce(): Promise<void> {
   // Start a new trace if none active or the previous one finished.
   if (!state.step || state.step.index >= state.step.trace.iterations.length) {
-    const msg = encoder.encode(state.currentMessage);
-    const result = await withSeedMaybe(() =>
-      instrumentedSign(msg, state.keypair.secretKey, undefined, { preset: 'ML-DSA-65' }),
-    );
-    const verified = ml_dsa65.verify(result.signature, msg, state.keypair.publicKey);
-    state.step = { trace: result, index: 0, verified };
+    const { payload, publicKey, verified } = await runRealSign();
+    state.step = { trace: payload, index: 0, verified, publicKey };
     iterationFeed.innerHTML = '';
     tamperPanel.hidden = true;
   }
@@ -483,10 +576,10 @@ async function stepOnce(): Promise<void> {
     const rejections = trace.acceptedIteration - 1;
     const msg = encoder.encode(state.currentMessage);
     signSummary.innerHTML = `
-      <p>Stepped through ${trace.acceptedIteration} iteration${trace.acceptedIteration === 1 ? '' : 's'} (${rejections} rejection${rejections === 1 ? '' : 's'}).</p>
+      <p>Stepped through ${trace.acceptedIteration} real iteration${trace.acceptedIteration === 1 ? '' : 's'} (${rejections} rejection${rejections === 1 ? '' : 's'}).</p>
       <p>Signature verifies via noble ML-DSA-65: <strong>${state.step.verified ? 'yes' : 'no'}</strong></p>
     `;
-    setLastSignature(trace.signature, msg, state.step.verified);
+    setLastSignature(trace.signature, msg, state.step.publicKey, state.step.verified);
     stepButton.textContent = 'Step ▶ (new trace)';
   } else {
     signSummary.innerHTML = `<p>Step ${state.step.index}: ${record?.result === 'REJECTED' ? `rejected (${record.rejectionReason}) — drawing again…` : 'accepted.'}</p>`;
@@ -494,20 +587,47 @@ async function stepOnce(): Promise<void> {
   }
 }
 
+const FIND_TRACE_MAX_ATTEMPTS = 400;
+
 async function showExampleTrace(k: number): Promise<void> {
   if (state.busy) return;
   setBusy(true);
   try {
     state.step = null;
     stepButton.textContent = 'Step ▶';
-    const trace = simulateTraceOfLength(k, {
-      preset: state.currentPreset,
-      acceptance: state.customAcceptance ?? undefined,
-    });
-    signSummary.innerHTML = `<p>Example trace of length <strong>${k}</strong> (illustrative — constructed to accept on iteration ${k}, no real signature).</p>`;
     tamperPanel.hidden = true;
     exhibit1.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
-    await revealIterations(trace.iterations);
+
+    if (state.customAcceptance !== null) {
+      // Exploratory simulation mode: construct an illustrative trace directly.
+      const trace = simulateTraceOfLength(k, { preset: state.currentPreset, acceptance: state.customAcceptance });
+      signSummary.innerHTML = `<p>Example trace of length <strong>${k}</strong> (exploratory simulation at p = ${state.customAcceptance.toFixed(2)} — no real signature).</p>`;
+      await revealIterations(trace.iterations.map(simToReal));
+      return;
+    }
+
+    // Real mode: hunt for an actual signature that took exactly k iterations.
+    iterationFeed.innerHTML = '';
+    signSummary.innerHTML = `<p>Hunting for a real ${state.currentPreset} signature that takes exactly <strong>${k}</strong> iterations…</p>`;
+    const res = await runJob<{ found: boolean; attempts: number; iterations?: RealIterationRecord[] }>(
+      {
+        kind: 'find-trace',
+        preset: state.currentPreset,
+        target: k,
+        maxAttempts: FIND_TRACE_MAX_ATTEMPTS,
+      },
+      (m) => {
+        signSummary.innerHTML = `<p>Hunting for a real ${k}-iteration trace… ${intFmt.format(m.done ?? 0)} real signatures tried.</p>`;
+      },
+    );
+    if (res.found && res.iterations) {
+      signSummary.innerHTML = `<p>Found a <strong>real</strong> trace with exactly <strong>${k}</strong> iterations after ${intFmt.format(res.attempts)} real signature${res.attempts === 1 ? '' : 's'}.</p>`;
+      await revealIterations(res.iterations);
+    } else {
+      const trace = simulateTraceOfLength(k, { preset: state.currentPreset });
+      signSummary.innerHTML = `<p>No real ${k}-iteration trace turned up within ${intFmt.format(res.attempts)} tries (long traces are rare — that's the geometric tail). Showing an <em>illustrative simulated</em> trace instead.</p>`;
+      await revealIterations(trace.iterations.map(simToReal));
+    }
   } finally {
     setBusy(false);
   }
@@ -517,7 +637,13 @@ async function showExampleTrace(k: number): Promise<void> {
 // Exhibit 2 — SVG histogram with geometric overlay
 // ---------------------------------------------------------------------------
 
-function histogramSvg(buckets: HistogramBucket[], p: number, total: number): string {
+interface PmfOverlay {
+  label: string;
+  p: number;
+  cls: string;
+}
+
+function histogramSvg(buckets: HistogramBucket[], p: number, total: number, overlays: PmfOverlay[] = []): string {
   const W = 760;
   const H = 340;
   const padL = 52;
@@ -531,8 +657,9 @@ function histogramSvg(buckets: HistogramBucket[], p: number, total: number): str
   const slot = plotW / n;
 
   const pmf = buckets.map((b) => geometricPmf(p, b.iteration));
+  const overlayPmfs = overlays.map((o) => buckets.map((b) => geometricPmf(o.p, b.iteration)));
   const maxObs = Math.max(0, ...buckets.map((b) => b.proportion));
-  const maxPmf = Math.max(0, ...pmf);
+  const maxPmf = Math.max(0, ...pmf, ...overlayPmfs.flat());
   const yMax = Math.max(maxObs, maxPmf, 0.04) * 1.15;
 
   const sy = (v: number): number => padT + plotH * (1 - v / yMax);
@@ -570,6 +697,12 @@ function histogramSvg(buckets: HistogramBucket[], p: number, total: number): str
 
   const linePts = buckets.map((_b, i) => `${cx(i).toFixed(1)},${sy(pmf[i] ?? 0).toFixed(1)}`).join(' ');
   const pmfLine = `<polyline class="pmf-line" points="${linePts}"/>`;
+  const overlayLines = overlays
+    .map((o, oi) => {
+      const pts = buckets.map((_b, i) => `${cx(i).toFixed(1)},${sy(overlayPmfs[oi]?.[i] ?? 0).toFixed(1)}`).join(' ');
+      return `<polyline class="pmf-line pmf-overlay ${o.cls}" points="${pts}"><title>${o.label}: geometric PMF at p = ${o.p.toFixed(2)}</title></polyline>`;
+    })
+    .join('');
   const pmfDots = buckets
     .map(
       (_b, i) =>
@@ -597,7 +730,9 @@ function histogramSvg(buckets: HistogramBucket[], p: number, total: number): str
     `<text class="axis-title" x="${(padL + plotW / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">iterations until acceptance</text>` +
     `<text class="axis-title" transform="translate(15 ${(padT + plotH / 2).toFixed(1)}) rotate(-90)" text-anchor="middle">share of signatures</text>`;
 
-  return `<svg viewBox="0 0 ${W} ${H}" class="hist-svg" role="img" aria-label="Histogram of iterations until acceptance. Mean about ${m.toFixed(1)} iterations. Bars track a theoretical geometric distribution.">${grid}${axes}${bars}${pmfLine}${pmfDots}${meanLine}${xLabels}${titles}</svg>`;
+  // role="group" (not "img"): the bars inside are interactive buttons, and
+  // nesting widgets inside an image role is an axe "nested-interactive" error.
+  return `<svg viewBox="0 0 ${W} ${H}" class="hist-svg" role="group" aria-label="Histogram of iterations until acceptance. Mean about ${m.toFixed(1)} iterations. Bars track a theoretical geometric distribution.">${grid}${axes}${bars}${overlayLines}${pmfLine}${pmfDots}${meanLine}${xLabels}${titles}</svg>`;
 }
 
 function histogramTable(buckets: HistogramBucket[]): string {
@@ -610,40 +745,77 @@ function histogramTable(buckets: HistogramBucket[]): string {
   return `<table class="sr-only"><caption>Histogram data: iterations until acceptance</caption><thead><tr><th>Iterations</th><th>Count</th><th>Share</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+const OVERLAY_STYLES: Record<PresetName, string> = {
+  'ML-DSA-44': 'pmf-p44',
+  'ML-DSA-65': 'pmf-p65',
+  'ML-DSA-87': 'pmf-p87',
+};
+
+function presetOverlays(): PmfOverlay[] {
+  if (!overlayPresetsCheck.checked) return [];
+  return (Object.keys(PRESETS) as PresetName[])
+    .filter((name) => name !== state.currentPreset || state.customAcceptance !== null)
+    .map((name) => ({ label: name, p: PRESETS[name].acceptance, cls: OVERLAY_STYLES[name] }));
+}
+
 function renderHistogram(): void {
   const p = activeAcceptance();
   const data = state.iterationHistory;
+  const overlays = presetOverlays();
+  const overlayLegend = overlays
+    .map((o) => `<span><span class="lg-swatch lg-pmf ${o.cls}"></span>${o.label} (p≈${o.p.toFixed(2)})</span>`)
+    .join('');
 
   if (data.length > 0) {
     const buckets = histogramBuckets(data);
-    histogramRoot.innerHTML = histogramSvg(buckets, p, data.length) + histogramTable(buckets);
-  } else if (state.customAcceptance !== null) {
-    // Exploratory mode with no data yet: show the theoretical curve alone so
-    // dragging the slider animates the geometric distribution and mean.
-    const span = Math.min(40, Math.max(8, Math.ceil(geometricMean(p) * 4)));
+    histogramRoot.innerHTML =
+      histogramSvg(buckets, p, data.length, overlays) +
+      (overlayLegend ? `<div class="chart-legend" aria-hidden="true">${overlayLegend}</div>` : '') +
+      histogramTable(buckets);
+  } else {
+    // No data yet: show the theoretical curve(s) alone so dragging the slider
+    // or toggling overlays still animates the geometric distribution.
+    const span = Math.min(40, Math.max(12, Math.ceil(geometricMean(p) * 4)));
     const buckets: HistogramBucket[] = Array.from({ length: span }, (_v, i) => ({
       iteration: i + 1,
       count: 0,
       proportion: 0,
     }));
-    histogramRoot.innerHTML = histogramSvg(buckets, p, 0);
-  } else {
+    const emptyNote =
+      state.customAcceptance === null && overlays.length === 0
+        ? '<p class="meta hist-empty">No data yet. Click Run 100 or Run 1000 to sign for real and build the distribution.</p>'
+        : '';
     histogramRoot.innerHTML =
-      '<p class="meta hist-empty">No data yet. Click Run 100 or Run 1000 to build the distribution.</p>';
+      histogramSvg(buckets, p, 0, overlays) +
+      (overlayLegend ? `<div class="chart-legend" aria-hidden="true">${overlayLegend}</div>` : '') +
+      emptyNote;
   }
 
+  const isSim = state.customAcceptance !== null;
+  const pHat = measuredAcceptance();
   const observedMean = sampleMean(data);
   const theoreticalMean = geometricMean(p);
+  const publishedP = PRESETS[state.currentPreset].acceptance;
+  const tailK = 8;
+  const tailTheory = (1 - p) ** tailK;
+  const tailObserved = data.length > 0 ? data.filter((v) => v > tailK).length / data.length : null;
   statsRoot.innerHTML = `
-    <div><span class="k">Preset</span><span class="v">${state.currentPreset}${state.customAcceptance !== null ? ' (custom p)' : ''}</span></div>
+    <div><span class="k">Source</span><span class="v">${isSim ? 'simulation (custom p)' : 'real signing loop'}</span></div>
+    <div><span class="k">Preset</span><span class="v">${state.currentPreset}${isSim ? ' (custom p)' : ''}</span></div>
     <div><span class="k">Runs</span><span class="v">${intFmt.format(state.histogramRuns)}</span></div>
+    <div><span class="k">${isSim ? 'p (slider)' : 'Measured p̂'}</span><span class="v">${isSim ? p.toFixed(2) : pHat !== null ? `${pHat.toFixed(3)} (ref ≈ ${publishedP.toFixed(2)})` : '—'}</span></div>
     <div><span class="k">Observed mean</span><span class="v">${fmt.format(observedMean)}</span></div>
-    <div><span class="k">Theory mean (1/p)</span><span class="v">${fmt.format(theoreticalMean)}</span></div>
+    <div><span class="k">Mean 1/p${isSim ? '' : '̂'}</span><span class="v">${fmt.format(theoreticalMean)}</span></div>
     <div><span class="k">Median</span><span class="v">${fmt.format(quantile(data, 0.5))}</span></div>
     <div><span class="k">P90</span><span class="v">${fmt.format(quantile(data, 0.9))}</span></div>
     <div><span class="k">P99</span><span class="v">${fmt.format(quantile(data, 0.99))}</span></div>
     <div><span class="k">Max</span><span class="v">${fmt.format(data.reduce((m, v) => (v > m ? v : m), 0))}</span></div>
+    <div><span class="k">P(&gt;${tailK}) observed</span><span class="v">${tailObserved !== null ? `${(tailObserved * 100).toFixed(2)}%` : '—'}</span></div>
+    <div><span class="k">P(&gt;${tailK}) theory</span><span class="v">${(tailTheory * 100).toFixed(2)}%</span></div>
   `;
+  tailNote.textContent =
+    `Worst-case tail: with p ≈ ${p.toFixed(2)}, P(more than 20 draws) = (1−p)²⁰ ≈ ${((1 - p) ** 20 * 100).toPrecision(2)}%. ` +
+    `The FIPS 204 loop is unbounded in the spec, but implementations may bound it and return failure — the tail is why that bound matters operationally.`;
 }
 
 function renderReasonBreakdown(): void {
@@ -924,6 +1096,9 @@ function setBusy(busy: boolean): void {
     measureButton,
     customPCheck,
     deterministicCheck,
+    ksModeSelect,
+    guessAButton,
+    guessBButton,
   ]) {
     el.disabled = busy;
   }
@@ -937,7 +1112,14 @@ async function runHistogramBatch(count: number): Promise<void> {
   if (state.busy) return;
   setBusy(true);
   try {
-    signSummary.innerHTML = `<p>Running ${intFmt.format(count)} signatures at ${state.currentPreset}…</p>`;
+    const isSim = state.customAcceptance !== null;
+    const runningLabel = isSim
+      ? `Simulating ${intFmt.format(count)} traces at p = ${state.customAcceptance?.toFixed(2)}`
+      : `Signing ${intFmt.format(count)} real ${state.currentPreset} signatures in the worker`;
+    signSummary.innerHTML = `<p>${runningLabel}…</p>`;
+    const request = isSim
+      ? { kind: 'histogram-sim', count, preset: state.currentPreset, acceptance: state.customAcceptance }
+      : { kind: 'histogram', count, preset: state.currentPreset };
     const payload = await runJob<{
       iterationCounts: number[];
       reasonBreakdown: [string, number][];
@@ -946,13 +1128,11 @@ async function runHistogramBatch(count: number): Promise<void> {
       p90: number;
       p99: number;
       max: number;
-    }>(
-      { kind: 'histogram', count, preset: state.currentPreset, acceptance: state.customAcceptance ?? undefined },
-      (m) => {
-        if ((m.done ?? 0) < count)
-          signSummary.innerHTML = `<p>Running ${state.currentPreset} batch: ${intFmt.format(m.done ?? 0)} / ${intFmt.format(count)}…</p>`;
-      },
-    );
+      measuredAcceptance: number;
+    }>(request, (m) => {
+      if ((m.done ?? 0) < count)
+        signSummary.innerHTML = `<p>${runningLabel}: ${intFmt.format(m.done ?? 0)} / ${intFmt.format(count)}…</p>`;
+    });
     for (const c of payload.iterationCounts) {
       state.iterationHistory.push(c);
       state.histogramRuns += 1;
@@ -962,8 +1142,11 @@ async function runHistogramBatch(count: number): Promise<void> {
     }
     renderHistogram();
     renderReasonBreakdown();
+    const sourceNote = isSim
+      ? `simulated at p = ${state.customAcceptance?.toFixed(2)}`
+      : `real signatures · measured p̂ = ${payload.measuredAcceptance.toFixed(3)} this batch`;
     signSummary.innerHTML = `
-      <p>Batch complete: ${intFmt.format(count)} signatures at <strong>${state.currentPreset}${state.customAcceptance !== null ? ` (p=${activeAcceptance().toFixed(2)})` : ''}</strong> (${intFmt.format(state.histogramRuns)} total).</p>
+      <p>Batch complete: ${intFmt.format(count)} ${isSim ? 'traces' : 'signatures'} at <strong>${state.currentPreset}</strong> (${sourceNote}; ${intFmt.format(state.histogramRuns)} total).</p>
       <p>Mean: ${payload.mean.toFixed(2)} · Median: ${payload.median.toFixed(2)} · P90: ${payload.p90.toFixed(2)} · P99: ${payload.p99.toFixed(2)} · Max: ${payload.max}</p>
     `;
   } catch (err) {
@@ -993,40 +1176,109 @@ async function measureRealTimes(): Promise<void> {
   }
 }
 
+const KS_REAL_N = 500;
+const KS_LEAKY_N = 1000;
+const LEAK_DELTA = 0.06;
+
+function renderKsChart(a: number[], b: number[]): void {
+  ksChart.innerHTML =
+    cdfOverlaySvg(a, b) +
+    `<div class="chart-legend" aria-hidden="true"><span><span class="lg-swatch lg-cdf-a"></span>population A</span><span><span class="lg-swatch lg-cdf-b"></span>population B</span><span><span class="lg-swatch lg-mean"></span>KS gap</span></div>`;
+}
+
+function verdictLines(verdict: KsVerdict): string[] {
+  return [
+    `KS statistic:    ${verdict.ksStatistic.toFixed(4)}`,
+    `alpha=${verdict.alpha} threshold: ${verdict.criticalValue.toFixed(4)}`,
+    `Result:          ${verdict.exceedsCritical ? 'exceeds threshold — distinguishable' : 'below threshold — indistinguishable'}`,
+  ];
+}
+
 async function runDistinguishabilityTestAction(): Promise<void> {
   if (state.busy) return;
   setBusy(true);
-  distinguishabilityOutput.textContent = 'Running 2 × 1000 simulated signatures at ML-DSA-65…';
+  state.leakGame = null;
+  leakGamePanel.hidden = true;
+  leakReveal.textContent = '';
   ksChart.innerHTML = '';
   try {
-    const payload = await runJob<{ a: number[]; b: number[]; verdict: KsVerdict }>(
-      { kind: 'ks', n: 1000, preset: 'ML-DSA-65' },
-      (m) => {
-        distinguishabilityOutput.textContent = `Running 2 × 1000 simulated signatures at ML-DSA-65…\npopulation A: ${m.a ?? 0} / 1000\npopulation B: ${m.b ?? 0} / 1000`;
-      },
-    );
-    const { a, b, verdict } = payload;
-    ksChart.innerHTML =
-      cdfOverlaySvg(a, b) +
-      `<div class="chart-legend" aria-hidden="true"><span><span class="lg-swatch lg-cdf-a"></span>population A</span><span><span class="lg-swatch lg-cdf-b"></span>population B</span><span><span class="lg-swatch lg-mean"></span>KS gap</span></div>`;
-    distinguishabilityOutput.textContent = [
-      'Both populations are drawn from the same simulated acceptance distribution,',
-      `so under H0 we expect ~${Math.round(verdict.alpha * 100)}% of runs to cross the threshold by chance.`,
-      '',
-      `KS statistic:    ${verdict.ksStatistic.toFixed(4)}`,
-      `alpha=${verdict.alpha} threshold: ${verdict.criticalValue.toFixed(4)}`,
-      `Result:          ${verdict.exceedsCritical ? 'exceeds threshold' : 'below threshold'}`,
-      '',
-      verdict.note,
-      '',
-      'This illustrates the FIPS 204 design intent (sk-independent',
-      'acceptance) — not a measurement of real noble signing times.',
-    ].join('\n');
+    if (state.ksMode === 'real') {
+      distinguishabilityOutput.textContent = `Signing 2 × ${KS_REAL_N} REAL ML-DSA-65 signatures with two fresh keypairs…`;
+      const payload = await runJob<{ a: number[]; b: number[]; verdict: KsVerdict }>(
+        { kind: 'ks', n: KS_REAL_N, preset: 'ML-DSA-65' },
+        (m) => {
+          distinguishabilityOutput.textContent = `Signing 2 × ${KS_REAL_N} REAL ML-DSA-65 signatures with two fresh keypairs…\nsigner A: ${m.a ?? 0} / ${KS_REAL_N}\nsigner B: ${m.b ?? 0} / ${KS_REAL_N}`;
+        },
+      );
+      renderKsChart(payload.a, payload.b);
+      distinguishabilityOutput.textContent = [
+        'Both populations are REAL iteration counts from the instrumented FIPS 204',
+        'loop, each with its own freshly generated secret key.',
+        '',
+        ...verdictLines(payload.verdict),
+        '',
+        payload.verdict.note,
+        '',
+        `Under H0 (same distribution) ~${Math.round(payload.verdict.alpha * 100)}% of runs cross the`,
+        'threshold by chance — so an occasional red result here is expected noise,',
+        'not a leak. The design intent of FIPS 204 is exactly this: iteration',
+        'count carries no information about which secret key was used.',
+      ].join('\n');
+    } else {
+      distinguishabilityOutput.textContent = `Building 2 × ${KS_LEAKY_N} traces — one signer is a HYPOTHETICAL leaky implementation…`;
+      const payload = await runJob<{
+        a: number[];
+        b: number[];
+        leakyIs: 'a' | 'b';
+        honestP: number;
+        leakyP: number;
+        verdict: KsVerdict;
+      }>({ kind: 'ks-leaky', n: KS_LEAKY_N, preset: 'ML-DSA-65', leakDelta: LEAK_DELTA }, (m) => {
+        distinguishabilityOutput.textContent = `Building 2 × ${KS_LEAKY_N} traces…\npopulation A: ${m.a ?? 0} / ${KS_LEAKY_N}\npopulation B: ${m.b ?? 0} / ${KS_LEAKY_N}`;
+      });
+      state.leakGame = {
+        leakyIs: payload.leakyIs,
+        honestP: payload.honestP,
+        leakyP: payload.leakyP,
+        verdict: payload.verdict,
+      };
+      renderKsChart(payload.a, payload.b);
+      leakGamePanel.hidden = false;
+      distinguishabilityOutput.textContent = [
+        'One population comes from a simulated BROKEN implementation whose',
+        'acceptance probability depends on the secret key — the exact defect the',
+        'real scheme is designed not to have. Make your guess above, then the',
+        'KS verdict is revealed.',
+      ].join('\n');
+    }
   } catch (err) {
     distinguishabilityOutput.textContent = `Test failed: ${(err as Error)?.message ?? err}`;
   } finally {
     setBusy(false);
   }
+}
+
+function revealLeakGuess(guess: 'a' | 'b'): void {
+  const game = state.leakGame;
+  if (!game) return;
+  const correct = guess === game.leakyIs;
+  leakReveal.innerHTML = `${correct ? '✓ Correct' : '✗ Not this one'} — population <strong>${game.leakyIs.toUpperCase()}</strong> is the leaky signer (p = ${game.leakyP.toFixed(2)} vs the faithful ${game.honestP.toFixed(2)}). Its CDF climbs more slowly: more rejections, more iterations, more time.`;
+  leakReveal.className = `meta ${correct ? 'ok' : 'bad'}`;
+  distinguishabilityOutput.textContent = [
+    'Positive control: the populations really do differ, and the KS test finds it.',
+    '',
+    ...verdictLines(game.verdict),
+    '',
+    game.verdict.note,
+    '',
+    'This is what a timing side channel looks like from the outside: an attacker',
+    'never sees the secret key, only iteration counts — yet the distributions',
+    'separate. FIPS 204 makes the acceptance probability key-independent',
+    'precisely so this attack finds nothing (switch back to the faithful',
+    'scenario to see the null result on real data).',
+  ].join('\n');
+  state.leakGame = null;
+  leakGamePanel.hidden = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1084,6 +1336,9 @@ deterministicCheck.addEventListener('change', () => {
   state.deterministic = deterministicCheck.checked;
   seedField.hidden = !state.deterministic;
   detNote.hidden = !state.deterministic;
+  // setBusy only reconciles this while a job runs; toggling while idle must
+  // enable/disable the field directly.
+  seedInput.disabled = !state.deterministic;
 });
 seedInput.addEventListener('input', () => {
   const v = Number.parseInt(seedInput.value, 10);
@@ -1095,13 +1350,13 @@ tamperFlip.addEventListener('click', () => {
   const sig = Uint8Array.from(state.lastSig.signature);
   const i = randomInt(0, sig.length - 1);
   sig[i] = (sig[i] ?? 0) ^ 0x01;
-  const ok = ml_dsa65.verify(sig, state.lastSig.message, state.keypair.publicKey);
+  const ok = ml_dsa65.verify(sig, state.lastSig.message, state.lastSig.publicKey);
   tamperResult.textContent = `flipped 1 bit of byte ${i} → verifies ${ok ? '✓ (!)' : '✗ no'}`;
   tamperResult.className = `tamper-result ${ok ? 'ok' : 'bad'}`;
 });
 tamperRestore.addEventListener('click', () => {
   if (!state.lastSig) return;
-  const ok = ml_dsa65.verify(state.lastSig.signature, state.lastSig.message, state.keypair.publicKey);
+  const ok = ml_dsa65.verify(state.lastSig.signature, state.lastSig.message, state.lastSig.publicKey);
   tamperResult.textContent = `original signature verifies ${ok ? '✓' : '✗'}`;
   tamperResult.className = `tamper-result ${ok ? 'ok' : 'bad'}`;
 });
@@ -1156,6 +1411,64 @@ pSlider.addEventListener('input', () => {
 
 measureButton.addEventListener('click', () => void measureRealTimes());
 runDistinguishabilityButton.addEventListener('click', () => void runDistinguishabilityTestAction());
+ksModeSelect.addEventListener('change', () => {
+  state.ksMode = ksModeSelect.value === 'leaky' ? 'leaky' : 'real';
+  state.leakGame = null;
+  leakGamePanel.hidden = true;
+  leakReveal.textContent = '';
+});
+guessAButton.addEventListener('click', () => revealLeakGuess('a'));
+guessBButton.addEventListener('click', () => revealLeakGuess('b'));
+
+overlayPresetsCheck.addEventListener('change', () => renderHistogram());
+
+// --- chart exports ---
+$<HTMLButtonElement>('#export-hist-svg').addEventListener('click', () => {
+  downloadChartSvg(histogramRoot, 'mldsa-iteration-histogram.svg');
+});
+$<HTMLButtonElement>('#export-hist-png').addEventListener('click', () => {
+  downloadChartPng(histogramRoot, 'mldsa-iteration-histogram.png');
+});
+$<HTMLButtonElement>('#export-hist-csv').addEventListener('click', () => {
+  const rows: (string | number)[][] = [['iterations_until_acceptance', 'count', 'proportion']];
+  for (const b of histogramBuckets(state.iterationHistory)) rows.push([b.iteration, b.count, b.proportion]);
+  downloadCsv('mldsa-iteration-histogram.csv', rows);
+});
+$<HTMLButtonElement>('#export-times-svg').addEventListener('click', () => {
+  downloadChartSvg(realtimeHist, 'mldsa-real-signing-times.svg');
+});
+$<HTMLButtonElement>('#export-times-png').addEventListener('click', () => {
+  downloadChartPng(realtimeHist, 'mldsa-real-signing-times.png');
+});
+$<HTMLButtonElement>('#export-times-csv').addEventListener('click', () => {
+  const rows: (string | number)[][] = [['signature_index', 'signing_time_ms']];
+  state.realTimes.forEach((t, i) => rows.push([i, t]));
+  downloadCsv('mldsa-real-signing-times.csv', rows);
+});
+
+// --- shareable link ---
+copyLinkButton.addEventListener('click', () => {
+  const url = buildShareUrl(window.location.origin + window.location.pathname, {
+    preset: state.currentPreset,
+    deterministic: state.deterministic,
+    seed: state.seed,
+    message: state.currentMessage,
+    customAcceptance: state.customAcceptance,
+    tour: false,
+  });
+  const report = (ok: boolean): void => {
+    copyLinkResult.textContent = ok
+      ? state.deterministic
+        ? 'copied — link replays this exact seeded trace ✓'
+        : 'copied ✓'
+      : url;
+  };
+  navigator.clipboard
+    ?.writeText(url)
+    .then(() => report(true))
+    .catch(() => report(false));
+  if (!navigator.clipboard) report(false);
+});
 
 histogramRoot.addEventListener('click', (e) => {
   const g = (e.target as Element).closest<SVGElement>('[data-iter]');
@@ -1190,7 +1503,116 @@ if (themeToggleButton) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Guided tour
+// ---------------------------------------------------------------------------
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    target: '.hero',
+    title: 'Why does ML-DSA signing take a variable amount of time?',
+    body: `<p>Because the algorithm is a <strong>loop that aborts on purpose</strong>. Each attempt draws a random candidate signature and applies four norm checks; if any check fails, the candidate is thrown away and the loop retries. This tour walks the real loop — everything you'll see is computed by the actual FIPS 204 arithmetic.</p>`,
+  },
+  {
+    target: '.lab > section.card:nth-of-type(1)',
+    title: 'Exhibit 1 — watch the real loop run',
+    body: `<p>Click the button below (or “Sign Once” in the exhibit) and watch the iterations stream in. Each card is one real candidate: its κ counter, its commitment hash c̃, and the four checks with the <em>actual norms</em> the algorithm computed. Red cards were rejected; the green card is the signature you get.</p>`,
+    action: { label: 'Sign one now', run: () => void triggerSignOnce() },
+  },
+  {
+    target: '.lab > section.card:nth-of-type(1)',
+    title: 'Quick check: a candidate just failed ‖z‖∞ < γ₁ − β',
+    body: `<p>Look at any red card above.</p>`,
+    quiz: {
+      question: 'What does the algorithm do next?',
+      options: [
+        'Abort signing and return an error',
+        'Increment κ, draw a fresh y, and try again',
+        'Shrink z until it fits the bound',
+      ],
+      answer: 1,
+      explain:
+        'rejection is not failure — the loop simply retries with fresh randomness. Shrinking or reusing a rejected candidate would leak information about the secret key s₁.',
+    },
+  },
+  {
+    target: '.lab > section.card:nth-of-type(2)',
+    title: 'Exhibit 2 — the shape of retrying',
+    body: `<p>Each iteration is (approximately) an independent trial with the same acceptance probability p, so the number of iterations until success follows a <strong>geometric distribution</strong>. Run a real batch and watch the bars settle onto the dotted theoretical curve — and note the measured p̂ in the stats.</p>`,
+    action: { label: 'Run 100 real signatures', run: () => void runHistogramBatch(100) },
+  },
+  {
+    target: '.lab > section.card:nth-of-type(2)',
+    title: 'Quick check: expected number of iterations',
+    body: `<p>ML-DSA-65 accepts each candidate with probability p ≈ 0.2 (the Dilithium spec's expected 5.1 repetitions — and what the real batch above measures).</p>`,
+    quiz: {
+      question: 'On average, how many iterations does one signature take?',
+      options: ['About 1 — rejection is rare', 'About 5 (1/p)', 'About 20'],
+      answer: 1,
+      explain:
+        'the mean of a geometric distribution is 1/p ≈ 1/0.196 ≈ 5.1 — and the histogram’s mean marker sits right there.',
+    },
+  },
+  {
+    target: '.lab > section.card:nth-of-type(3)',
+    title: 'Exhibit 3 — the loop you can measure from outside',
+    body: `<p>This exhibit times thousands of untouched <code>ml_dsa65.sign</code> calls with <code>performance.now()</code>. The right-skewed spread mirrors the iteration histogram: more rejections ⇒ more wall-clock time. This is exactly what an attacker could observe — which is why the next question matters.</p>`,
+  },
+  {
+    target: '.lab > section.card:nth-of-type(6)',
+    title: 'Exhibit 6 — can timing reveal the key?',
+    body: `<p>The <strong>faithful scenario</strong> compares real iteration counts from two different secret keys: the KS test should find nothing, because acceptance is key-independent by design. The <strong>broken scenario</strong> injects a hypothetical implementation whose acceptance <em>does</em> depend on the key — try to spot it before the statistics do.</p>`,
+    action: {
+      label: 'Run the broken (leaky) scenario',
+      run: () => {
+        ksModeSelect.value = 'leaky';
+        state.ksMode = 'leaky';
+        void runDistinguishabilityTestAction();
+      },
+    },
+  },
+  {
+    target: '.lab > section.card:nth-of-type(4)',
+    title: 'Last check: why is rejection a security feature?',
+    body: `<p>Exhibit 4 explains what each individual check protects. The big picture:</p>`,
+    quiz: {
+      question: 'Rejecting out-of-range candidates matters because…',
+      options: [
+        'It compresses signatures so they fit in 3,309 bytes',
+        'It keeps published signatures statistically independent of the secret key',
+        'It speeds signing up by skipping slow candidates',
+      ],
+      answer: 1,
+      explain:
+        'a z that escaped the γ₁ − β bound would be correlated with c·s₁ — collect enough of them and the secret key falls out. Rejection buys security with time, which is why variable signing time is a feature, not a bug.',
+    },
+  },
+];
+
+const tour = createTour(TOUR_STEPS);
+tourStartButton.addEventListener('click', () => tour.start());
+
+// ---------------------------------------------------------------------------
+// Initial state sync (URL-restored values → controls) and first render
+// ---------------------------------------------------------------------------
+
+messageInput.value = state.currentMessage;
+presetSelect.value = state.currentPreset;
+deterministicCheck.checked = state.deterministic;
+seedInput.value = String(state.seed);
+seedField.hidden = !state.deterministic;
+detNote.hidden = !state.deterministic;
+seedInput.disabled = !state.deterministic;
+if (state.customAcceptance !== null) {
+  customPCheck.checked = true;
+  pSlider.disabled = false;
+  pSlider.value = state.customAcceptance.toFixed(2);
+  updateAcceptanceUi();
+}
+
 renderHistogram();
 renderReasonBreakdown();
 renderRealTiming();
 renderCheckExplanations();
+
+if (urlState.tour) tour.start();

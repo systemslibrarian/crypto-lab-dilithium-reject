@@ -909,3 +909,220 @@ td {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- Preset comparison overlays (theory PMF lines) ---- */
+.pmf-overlay {
+  stroke-width: 1.6;
+  stroke-dasharray: 2 4;
+  opacity: 0.9;
+}
+.pmf-p44 {
+  stroke: var(--accept);
+}
+.lg-pmf.pmf-p44 {
+  border-top-color: var(--accept);
+  background: none;
+}
+.pmf-p65 {
+  stroke: var(--cyan);
+}
+.lg-pmf.pmf-p65 {
+  border-top-color: var(--cyan);
+  background: none;
+}
+.pmf-p87 {
+  stroke: var(--hint);
+}
+.lg-pmf.pmf-p87 {
+  border-top-color: var(--hint);
+  background: none;
+}
+
+/* ---- Hero actions & shareable link ---- */
+.hero-actions {
+  margin-top: 1rem;
+}
+
+#tour-start {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+#copy-link-result.meta {
+  overflow-wrap: anywhere;
+}
+
+/* ---- Export buttons & tail note ---- */
+.export-row {
+  align-items: center;
+}
+
+.mini-btn {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.78rem;
+  width: auto;
+}
+
+.tail-note {
+  margin-top: 0.4rem;
+}
+
+/* ---- Leak game (Exhibit 6 positive control) ---- */
+.leak-game {
+  margin: 0.8rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px dashed var(--reject);
+  border-radius: 12px;
+}
+
+.leak-game .ok,
+#leak-reveal.ok {
+  color: var(--accept);
+}
+
+.leak-game .bad,
+#leak-reveal.bad {
+  color: var(--reject);
+}
+
+/* ---- Guided tour ---- */
+.tour-panel {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 1100;
+  margin: 0 auto;
+  width: min(720px, calc(100% - 1.5rem));
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+  border: 1px solid var(--cyan);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  padding: 0.9rem 1.1rem 1rem;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 -6px 30px rgba(0, 0, 0, 0.35);
+  animation: rise-in 220ms ease both;
+}
+
+.tour-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.tour-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.tour-title:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.tour-progress {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.tour-body {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.tour-body p {
+  margin: 0.4rem 0;
+}
+
+.tour-body strong,
+.tour-body em {
+  color: var(--text);
+}
+
+.tour-action {
+  margin: 0.3rem 0 0.5rem;
+  border-color: var(--cyan);
+  color: var(--cyan);
+  width: auto;
+}
+
+.tour-quiz {
+  margin: 0.5rem 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.6rem 0.8rem;
+}
+
+.tour-quiz legend {
+  padding: 0 0.4rem;
+  font-size: 0.9rem;
+}
+
+.tour-quiz-options {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.tour-quiz-option {
+  text-align: left;
+  width: 100%;
+  font-size: 0.86rem;
+}
+
+.tour-quiz-option.quiz-correct {
+  border-color: var(--accept);
+  color: var(--accept);
+}
+
+.tour-quiz-option.quiz-incorrect {
+  border-color: var(--reject);
+  color: var(--reject);
+}
+
+.tour-quiz-feedback {
+  min-height: 1.2em;
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+}
+
+.tour-quiz-feedback.ok {
+  color: var(--accept);
+}
+
+.tour-quiz-feedback.bad {
+  color: var(--reject);
+}
+
+.tour-nav {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.tour-nav button {
+  width: auto;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.9rem;
+}
+
+.tour-nav .tour-exit {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.tour-highlight {
+  outline: 2px solid var(--cyan);
+  outline-offset: 4px;
+  scroll-margin-top: 84px;
+  scroll-margin-bottom: min(48vh, 400px);
+}
+
+@media (max-width: 768px) {
+  .tour-panel {
+    max-height: 55vh;
+  }
+}

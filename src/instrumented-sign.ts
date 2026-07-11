@@ -1,8 +1,13 @@
 /**
- * Didactic ML-DSA rejection-sampling trace.
+ * Didactic ML-DSA rejection-sampling SIMULATION.
  *
- * This module simulates the FIPS 204 Fiat-Shamir-with-Aborts loop for
- * teaching purposes. Each iteration is a calibrated coin flip:
+ * Since the real instrumented loop landed in `real-sign.ts`, this module only
+ * backs the clearly-labelled simulation features: the exploratory `p` slider,
+ * the hypothetical leaky-signer scenario, and the illustrative fallback traces.
+ * The iteration feed, histogram batches, and KS faithful mode all use the real
+ * loop instead.
+ *
+ * Each simulated iteration is a calibrated coin flip:
  *   - acceptance probability is fixed per preset to match published
  *     ML-DSA implementation results;
  *   - when a candidate is rejected, the rejection reason is sampled
@@ -37,26 +42,34 @@ interface PresetParams {
   omega: number;
 }
 
+/**
+ * Acceptance probabilities are 1 / (expected repetitions) from the Dilithium
+ * specification (4.25 / 5.1 / 3.85 for levels 2/3/5) and match what this
+ * demo's own real instrumented loop measures (p̂ ≈ 0.232 / 0.192 / 0.261 at
+ * N=400). The rejection mixes are measured from the real loop too: z and r0
+ * split the rejections roughly evenly, ct0 and the hint check almost never
+ * fire.
+ */
 export const PRESETS: Record<PresetName, PresetParams> = {
   'ML-DSA-44': {
-    acceptance: 0.31,
-    rejectionMix: { z: 0.5, r0: 0.42, ct0: 0.07, hint: 0.01 },
+    acceptance: 0.235,
+    rejectionMix: { z: 0.6, r0: 0.39, ct0: 0.005, hint: 0.005 },
     gamma1: 131072,
     gamma2: 95232,
     beta: 78,
     omega: 80,
   },
   'ML-DSA-65': {
-    acceptance: 0.26,
-    rejectionMix: { z: 0.52, r0: 0.41, ct0: 0.06, hint: 0.01 },
+    acceptance: 0.196,
+    rejectionMix: { z: 0.5, r0: 0.49, ct0: 0.005, hint: 0.005 },
     gamma1: ML_DSA_65.gamma1,
     gamma2: ML_DSA_65.gamma2,
     beta: ML_DSA_65.beta,
     omega: ML_DSA_65.omega,
   },
   'ML-DSA-87': {
-    acceptance: 0.22,
-    rejectionMix: { z: 0.53, r0: 0.4, ct0: 0.06, hint: 0.01 },
+    acceptance: 0.26,
+    rejectionMix: { z: 0.44, r0: 0.55, ct0: 0.005, hint: 0.005 },
     gamma1: 524288,
     gamma2: 261888,
     beta: 120,
@@ -317,6 +330,9 @@ export async function instrumentedSign(
   options: { preset?: PresetName; acceptance?: number; maxIterations?: number } = {},
 ): Promise<SigningResult> {
   const trace = await simulateRejectionTrace({ ...options, onIteration });
+  // randomBytes comes from the demo's seedable PRNG on purpose: in seeded mode
+  // the signature must reproduce exactly. Weak entropy is the feature here,
+  // never a pattern for production signing (noble's CSPRNG is the default).
   const signature = ml_dsa65.sign(message, secretKey, { extraEntropy: randomBytes(32) });
   return {
     signature,

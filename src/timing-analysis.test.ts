@@ -45,3 +45,31 @@ describe('distinguishabilityTest', () => {
     expect(v1000.criticalValue).toBeLessThan(v100.criticalValue);
   });
 });
+
+describe('leaky-signer positive control (Exhibit 6 broken scenario)', () => {
+  const geometricDraw = (p: number): number => {
+    let k = 1;
+    while (Math.random() >= p) k += 1;
+    return k;
+  };
+  const population = (p: number, n: number): TimingObservation[] =>
+    obs(Array.from({ length: n }, () => geometricDraw(p)));
+
+  it('detects the demo leak parameters (p=0.196 vs p=0.136) at N=1500', () => {
+    // Same acceptance gap the leaky scenario injects (LEAK_DELTA = 0.06 off
+    // the ML-DSA-65 reference p). Theoretical KS distance ≈ 0.14 vs a critical
+    // value ≈ 0.05 at this N, so a miss here would mean the positive control
+    // is broken, not bad luck.
+    const v = distinguishabilityTest(population(0.196, 1500), population(0.136, 1500));
+    expect(v.exceedsCritical).toBe(true);
+  });
+
+  it('stays quiet for two faithful populations at the same p', () => {
+    // One draw can still cross by chance (~alpha), so take the best of three —
+    // P(all three cross) ≈ alpha³, negligible flake risk.
+    const results = Array.from({ length: 3 }, () =>
+      distinguishabilityTest(population(0.196, 1000), population(0.196, 1000)),
+    );
+    expect(results.some((v) => !v.exceedsCritical)).toBe(true);
+  });
+});

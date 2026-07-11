@@ -8,21 +8,25 @@ This project visualizes the signing rejection loop used by ML-DSA (FIPS 204, Aug
 
 The demo targets ML-DSA-65 (NIST level 3) by default and uses strict TypeScript with a browser-only stack (Vite + vanilla CSS, no backend).
 
-Heavy batches and the real-timing measurement run in a **Web Worker** so the UI stays smooth.
+All signing runs in a **Web Worker** so the UI stays smooth.
 
-Highlights — **didactic simulation** (calibrated, see [the boundary](#how-this-demo-works-important)):
+Highlights — **real instrumented cryptography** (see [how it works](#how-this-demo-works-important)):
 
-- **Streamed iteration feed** that reveals candidates one-by-one, each with four labelled PASS/FAIL norm checks (`‖z‖∞`, `‖r₀‖∞`, `‖c·t₀‖∞`, `wt(h)`) and the explicit rejection reason — plus a **step-through mode** to advance one iteration at a time
-- **SVG histogram** of iterations-until-acceptance with a theoretical geometric-distribution overlay and a `mean = 1/p` marker, per preset. An **exploratory `p` slider** lets you drag the acceptance probability and watch the geometric curve and mean move; **click any bar** to replay an example trace of that length
-- **Rejection-reason breakdown bar** showing the published mix (z dominates, r0 next, ct0 and hint rare)
-- **KS distinguishability test** that overlays two empirical CDFs and marks the max gap, illustrating sk-independent timing
-- **Reproducible (seeded) mode** so a trace and its signature can be reproduced exactly — the idea behind FIPS 204 deterministic signing
-
-Highlights — **real cryptography** (via [`@noble/post-quantum`](https://www.npmjs.com/package/@noble/post-quantum)):
-
-- **Exhibit 3 measures real signing times**: it calls the actual `ml_dsa65.sign` thousands of times and plots the genuine, right-skewed wall-clock distribution (with an honest caveat about timer resolution)
+- **The actual FIPS 204 signing loop, instrumented.** `src/real-sign.ts` vendors [`@noble/post-quantum`](https://www.npmjs.com/package/@noble/post-quantum)'s ML-DSA signing internals with one change: a per-iteration probe. The test suite asserts the probed loop produces **byte-identical signatures** to the untouched library for all three parameter sets.
+- **Streamed iteration feed** revealing each real candidate one-by-one: the real κ counter, the real commitment hash c̃, and four labelled PASS/FAIL checks (`‖z‖∞`, `‖r₀‖∞`, `‖c·t₀‖∞`, `wt(h)`) whose values are computed from the live `y + c·s₁` arithmetic — plus a **step-through mode**
+- **SVG histogram of real iteration counts** with a geometric-PMF overlay whose `p̂` is **measured from the batch** (published estimates shown for reference), a `mean = 1/p̂` marker, worst-case tail stats, and a **rejection-reason breakdown measured from real rejections**. **Click any bar** to hunt for a real trace of exactly that length
+- **KS distinguishability test on real data**: two freshly generated keys each sign hundreds of real signatures; their iteration-count CDFs overlay and the max gap is marked — demonstrating sk-independent acceptance on the real scheme
+- **A positive control**: switch Exhibit 6 to the _broken (hypothetical)_ scenario and a simulated implementation whose acceptance depends on the secret key sneaks into one population. Guess which — then watch the KS test catch it
+- **Exhibit 3 measures real signing times**: thousands of actual `ml_dsa65.sign` calls timed with `performance.now()`, plotting the genuine right-skewed wall-clock distribution (with an honest caveat about timer resolution)
 - **Tamper test**: flip one bit of a produced signature and watch real `ml_dsa65.verify` reject it
-- The "valid" signature in Exhibit 1 is produced and verified by the real library
+- **Reproducible (seeded) mode** that derives both the keypair and the signing randomness from a seed, so the **exact real trace and signature replay** — and can be shared as a URL
+
+Learning aids:
+
+- **Guided tour** (`▶ Start guided tour`) that walks the exhibits with narrative and self-check quiz questions
+- **Shareable links** encoding preset, seed, message, and exploratory settings (`?preset=…&seed=…`)
+- **Chart exports**: SVG/PNG for slides, CSV of iteration counts and timing data
+- An **exploratory `p` slider** (clearly labelled as simulation) to drag the acceptance probability and watch the geometric curve move, plus a **compare-presets overlay** of the three parameter sets' theoretical curves
 
 Plus: comparison table across Ed25519/ECDSA/ML-DSA/SLH-DSA/FALCON/LMS, an exhibit explaining why each check exists in FIPS 204, a symbols glossary with further-reading links, dark/light themes (AA/AAA contrast), keyboard + screen-reader support (verified by an axe-core test), and `prefers-reduced-motion` handling.
 
@@ -42,7 +46,7 @@ Do not use this project as production signing code. For production, use maintain
 
 **[systemslibrarian.github.io/crypto-lab-dilithium-reject](https://systemslibrarian.github.io/crypto-lab-dilithium-reject/)**
 
-The page streams the ML-DSA signing rejection loop iteration by iteration, plots a histogram of iterations-until-acceptance against the theoretical geometric distribution, breaks down rejection reasons, and runs a KS distinguishability test for sk-independent timing. Exhibit 3 times thousands of real `ml_dsa65.sign` calls and a tamper test flips a bit so real `ml_dsa65.verify` rejects it.
+The page streams the real ML-DSA signing rejection loop iteration by iteration, plots a histogram of real iterations-until-acceptance against the geometric distribution at the measured p̂, breaks down real rejection reasons, and runs a KS distinguishability test on real per-key populations (with a hypothetical leaky-signer scenario as the positive control). Exhibit 3 times thousands of real `ml_dsa65.sign` calls and a tamper test flips a bit so real `ml_dsa65.verify` rejects it.
 
 ![ML-DSA Rejection Sampling Explorer — dark theme, showing the per-check iteration trace and the histogram of iterations until acceptance with a theoretical geometric overlay](docs/screenshot.png)
 
@@ -86,18 +90,22 @@ npm run dev
 
 ## How This Demo Works (Important)
 
-The iteration feed in Exhibit 1 and the histogram in Exhibit 2 are a **didactic simulation calibrated to ML-DSA's published acceptance distribution**, not a fork of the real signing internals.
+**Exhibits 1–3 and the KS faithful scenario are real.** The core of the demo is `src/real-sign.ts`: [`@noble/post-quantum`](https://www.npmjs.com/package/@noble/post-quantum)'s ML-DSA signing internals (MIT), vendored with a per-iteration `onIteration` probe. Nothing that decides acceptance is changed — same SHAKE XOF streams, same NTT arithmetic, same coders, same check order — so the instrumented loop produces **byte-identical signatures** to the untouched library. That claim is enforced in CI: `src/real-sign.test.ts` signs with fixed entropy through both paths and compares the bytes, for ML-DSA-44, -65, and -87.
 
-- Acceptance per iteration is a coin flip with `p(accept)` set per preset (~0.31 for ML-DSA-44, ~0.26 for ML-DSA-65, ~0.22 for ML-DSA-87). These are **illustrative values calibrated to the order-of-magnitude reported by published ML-DSA implementations**; treat them as the right shape of the distribution, not as measurements. The calibration is asserted by `src/instrumented-sign.test.ts`, which fails the build if mean iterations drift more than ±15% from `1/acceptance`.
-- Because each iteration is an _independent_ coin flip, the number of iterations until acceptance is **geometrically distributed**. Exhibit 2 overlays that theoretical geometric PMF (and the `mean = 1/p` marker) on the observed bars so you can see the simulation match the model — and so the same independence is what makes timing sk-independent in the real scheme.
-- When a candidate is rejected, the specific reason is sampled from the published mix (z dominates, r0 next, ct0 and hint rare). The displayed `||z||∞`, `||r0||∞`, `||c·t0||∞` values are positioned above/below their thresholds to be consistent with that reason; they are not computed from a live `y + c·s1` etc.
-- The actual signature shown as "valid" is produced by [`@noble/post-quantum`](https://www.npmjs.com/package/@noble/post-quantum)'s real ML-DSA implementation. The verification check uses the same library. That part is real.
-- **Exhibit 3 is real, not simulated.** It times thousands of actual `ml_dsa65.sign` calls with `performance.now()` and plots the genuine distribution. The variability is real variable-time signing; the caveat is that browser timer resolution is coarse/jittered and JIT/GC add noise, so it's faithful in shape, not in absolute milliseconds. The **tamper test** also uses the real library: a flipped bit makes `ml_dsa65.verify` return false.
-- `src/mldsa-primitives.ts` contains real implementations of `infinityNorm`, `highBits`/`lowBits`, `hintWeight`, and a SampleInBall variant; it is wired into the demo for the per-check explanation exhibit but does not drive the iteration feed.
+What that buys, concretely:
 
-This separation is deliberate: instrumenting `@noble/post-quantum`'s signing loop from outside the library would require patching internals, while the goal here is pedagogical clarity. The simulation is faithful to the _shape_ and _reasons_ — not the bit-exact arithmetic — of FIPS 204 § 6.
+- **Exhibit 1's cards are real.** Each iteration record carries the real κ, the real c̃ commitment-hash prefix, and `‖z‖∞`, `‖r₀‖∞`, `‖c·t₀‖∞`, `wt(h)` computed from the live polynomials. One nuance: the production loop short-circuits at the first failing check; in the feed's detail mode the remaining checks are still evaluated (on the same real polynomials) so every card can show all four values. The reported rejection reason always follows the algorithm's own evaluation order.
+- **Exhibit 2's histogram is real.** Batches run the instrumented loop (in its fast mode, which short-circuits exactly like production) and record how many candidates each real signature needed. The acceptance probability `p̂` in the stats is measured from the batch — the reference values (≈0.235 / ≈0.196 / ≈0.26 per preset, i.e. the Dilithium specification's expected 4.25 / 5.1 / 3.85 repetitions) are shown only for comparison. The rejection-reason breakdown counts real rejections; measured on real data, z and r₀ split the rejections roughly evenly while c·t₀ and the hint check almost never fire. (Making the loop real caught the demo's own earlier calibration being wrong — the previous "published" values overstated acceptance.)
+- **Clicking a histogram bar hunts for a real trace** of exactly that length (searching by entropy, then replaying the match in detail mode). If the search budget runs out — long traces are geometrically rare — the demo falls back to an _explicitly labelled_ illustrative simulation.
+- **Exhibit 6's faithful scenario is real**: two freshly generated keypairs each produce hundreds of real signatures, and the KS test compares their iteration-count distributions.
+- **Seeded mode replays real traces.** The seed derives the ML-DSA keypair seed and the 32-byte signing entropy (FIPS 204 `rnd`), so the same seed — including via a shared link — reproduces the same real trace and the same signature bytes. The seeded entropy is intentionally non-cryptographic; that is the reproducibility feature, never a production pattern.
 
-If you need bit-exact internal traces of real ML-DSA signing, use a reference implementation that exposes per-iteration hooks (e.g. NIST's C reference) rather than this demo.
+Two features are simulations, and say so in the UI:
+
+- **The exploratory `p` slider** replaces the real batch with a calibrated coin-flip simulation so you can drag the acceptance probability freely. Its calibration is asserted by `src/instrumented-sign.test.ts` (±15% of `1/p`).
+- **The broken (leaky) scenario in Exhibit 6** injects a _hypothetical_ implementation whose acceptance probability depends on the secret key — the defect the real scheme is designed not to have. It exists as a positive control: the KS test should (and does) catch it, which is what makes the null result on real data meaningful.
+
+`src/mldsa-primitives.ts` remains a small didactic library (`infinityNorm`, `highBits`/`lowBits`, SampleInBall variant, seedable RNG) backing the per-check explanation exhibit and the simulation modes.
 
 ## Build & Scripts
 
@@ -119,12 +127,15 @@ Requires Node 22+. The build is a static bundle; the GitHub Pages workflow (`.gi
 npm test
 ```
 
+- `src/real-sign.test.ts` — **the correctness gate**: the instrumented loop must produce byte-identical signatures to untouched noble for all three parameter sets and several entropies; detail and fast modes must agree; iteration records must be internally consistent (stated reason's check actually fails, accepted record passes all four); measured acceptance lands in a sane band; the deterministic variant reproduces traces exactly.
 - `src/distributions.test.ts` — the pure math behind the charts (geometric PMF/CDF/mean, histogram bucketing, continuous binning, empirical CDF, quantiles, KS max-gap).
-- `src/instrumented-sign.test.ts` — **calibration gate**: fails the build if mean iterations drift more than ±15% from `1/acceptance`, plus the rejection-reason mix, the exploratory acceptance override, exact-length traces, and that the returned signature verifies under real noble ML-DSA-65.
+- `src/instrumented-sign.test.ts` — **simulation calibration gate** for the exploratory mode: fails the build if mean iterations drift more than ±15% from `1/acceptance`, plus the rejection-reason mix, exact-length traces, and that the returned signature verifies under real noble ML-DSA-65.
+- `src/timing-analysis.test.ts` — the KS distinguishability verdict, including the **leaky-signer positive control**: the demo's leak parameters must be detectable and two faithful populations must not be.
+- `src/url-state.test.ts` — the shareable-link codec round-trips and rejects malformed input.
+- `src/chart-export.test.ts` — CSV quoting and standalone-SVG serialization.
 - `src/mldsa-primitives.test.ts` — `infinityNorm`, `highBits`/`lowBits` round-trip, `SampleInBall`, `expandMask` ranges, `hintWeight`, and the seedable RNG (same seed ⇒ identical trace).
 - `src/real-timing.test.ts` — the real `ml_dsa65.sign` timing harness returns one non-negative duration per signature.
-- `src/timing-analysis.test.ts` — the KS distinguishability verdict.
-- `src/app.dom.test.ts` — renders the whole app in jsdom and asserts there are **no serious/critical accessibility violations** (axe-core), plus that every primary control is wired.
+- `src/app.dom.test.ts` — renders the whole app in jsdom and asserts there are **no serious/critical accessibility violations** (axe-core), that every primary control is wired, and that the guided tour starts, advances, and exits.
 
 ## License
 
@@ -132,6 +143,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-*One of 120+ browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
+_One of 120+ browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite._
 
-*"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
+_"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31_

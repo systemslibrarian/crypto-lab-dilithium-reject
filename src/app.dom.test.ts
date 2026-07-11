@@ -19,6 +19,10 @@ beforeAll(async () => {
         },
       }) as unknown as MediaQueryList;
   }
+  // jsdom doesn't implement scrollIntoView; the tour uses it per step.
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
   document.documentElement.setAttribute('lang', 'en');
   document.documentElement.setAttribute('data-theme', 'dark');
   document.body.innerHTML = `
@@ -49,8 +53,36 @@ describe('rendered app', () => {
       '#p-slider',
       '#measure-times',
       '#run-distinguishability',
+      '#tour-start',
+      '#copy-link',
+      '#overlay-presets',
+      '#ks-mode',
+      '#guess-a',
+      '#guess-b',
+      '#export-hist-svg',
+      '#export-hist-png',
+      '#export-hist-csv',
+      '#export-times-svg',
+      '#export-times-png',
+      '#export-times-csv',
     ];
     for (const id of ids) expect(document.querySelector(id), id).not.toBeNull();
+  });
+
+  it('starts and exits the guided tour', () => {
+    const startButton = document.querySelector<HTMLButtonElement>('#tour-start');
+    startButton?.click();
+    const panel = document.querySelector('.tour-panel');
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain('1 / ');
+    document.querySelector<HTMLButtonElement>('.tour-next')?.click();
+    expect(document.querySelector('.tour-panel')?.textContent).toContain('2 / ');
+    document.querySelector<HTMLButtonElement>('.tour-exit')?.click();
+    expect(document.querySelector('.tour-panel')).toBeNull();
+  });
+
+  it('histogram stats declare their data source', () => {
+    expect(document.querySelector('#stats')?.textContent).toContain('real signing loop');
   });
 
   it('exposes a single banner-free main landmark and labelled regions', () => {
