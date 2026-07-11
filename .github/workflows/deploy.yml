@@ -20,6 +20,10 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Accessibility gate (axe-core, WCAG A/AA)
+        run: npm run test:a11y
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
