@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:a11y": "playwright test",
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write ."
@@ -17,7 +18,9 @@
     "@noble/post-quantum": "^0.6.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "axe-core": "^4.12.1",
     "eslint": "^10.5.0",
     "eslint-config-prettier": "^10.1.8",
