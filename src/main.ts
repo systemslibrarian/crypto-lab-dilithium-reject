@@ -93,10 +93,18 @@ const REASONS = [
 
 app.innerHTML = `
 <main class="lab" id="main-content">
-  <header class="hero card">
-    <p class="eyebrow">crypto-lab-dilithium-reject</p>
-    <h1>ML-DSA Rejection Sampling Explorer</h1>
-    <p class="lede">Fiat-Shamir with Aborts visualized iteration-by-iteration: each candidate is accepted or rejected against four explicit norm bounds. Variable signing time is the security feature — watch it happen.</p>
+  <div class="hero card">
+    <header class="cl-hero">
+      <div class="cl-hero-main">
+        <h1 class="cl-hero-title">ML-DSA Rejection Sampling</h1>
+        <p class="cl-hero-sub">Fiat-Shamir with Aborts · FIPS 204 signing</p>
+        <p class="cl-hero-desc">Watch ML-DSA-65 sign for real, iteration by iteration, as each candidate is accepted or rejected against the four norm-bound checks.</p>
+      </div>
+      <aside class="cl-hero-why" aria-label="Why it matters">
+        <span class="cl-hero-why-label">WHY IT MATTERS</span>
+        <p class="cl-hero-why-text">Rejection is what keeps a signature statistically independent of the secret key, and it is why signing time varies. That variance is a deliberate safeguard, but it also opens a timing side-channel that implementations must manage.</p>
+      </aside>
+    </header>
     <div class="hero-tags">
       <span>FIPS 204 (ML-DSA-65)</span>
       <span>Signing is loop + abort</span>
@@ -110,7 +118,7 @@ app.innerHTML = `
     <div class="controls hero-actions">
       <button id="tour-start" type="button">▶ Start guided tour</button>
     </div>
-  </header>
+  </div>
 
   <section class="card">
     <h2>Exhibit 1: Watch the Loop</h2>
