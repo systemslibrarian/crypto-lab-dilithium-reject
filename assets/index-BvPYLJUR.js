@@ -152,7 +152,7 @@
           <tr><td>ML-DSA-65</td><td>3309 B</td><td>Varies (reject loop)</td><td>~95 us</td><td class="warn">Yes (by design)</td></tr>
           <tr><td>SLH-DSA-128s</td><td>8 KB</td><td>Slow (hash trees)</td><td>Fast</td><td>Yes (trees)</td></tr>
           <tr><td>FALCON-512</td><td>666 B</td><td>~200 us</td><td>~45 us</td><td>Yes (Gaussian)</td></tr>
-          <tr><td>LMS H10/W4</td><td>1452 B</td><td>~30 us</td><td>~50 us</td><td>No (stateful)</td></tr>
+          <tr><td>LMS H10/W8</td><td>1452 B</td><td>~30 us</td><td>~50 us</td><td>No (stateful)</td></tr>
         </tbody>
       </table>
     </div>
