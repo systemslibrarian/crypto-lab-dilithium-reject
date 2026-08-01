@@ -4,6 +4,17 @@
   --bg-2: #0b1723;
   --panel: rgba(13, 23, 34, 0.86);
   --line: rgba(255, 255, 255, 0.12);
+  /* Control boundaries only (WCAG 2.1 SC 1.4.11). Fields are filled with
+     --input-bg, a 32% black wash that composites to within ~1.1:1 of the
+     --panel behind it, so the border carries the whole delineation. Measured
+     opaque against the composited surfaces — both stops of the body gradient,
+     each with the cyan and pink halos applied, then --panel and --input-bg /
+     --code-bg layered on: #657888 is 3.74:1 at worst (--panel under the cyan
+     halo) and 4.08:1 at best. Keeps the deep-navy cool cast of the palette.
+     --line is unchanged for decorative rules: panel outlines, table and
+     section rules, SVG strokes, and buttons (which are filled, so their
+     boundary is not load-bearing). */
+  --border-strong: #657888;
   --text: #f2f8ff;
   --muted: #99abc2;
   --accept: #00ff88;
@@ -29,6 +40,10 @@
   --bg-2: #ffffff;
   --panel: rgba(255, 255, 255, 0.92);
   --line: rgba(15, 30, 50, 0.16);
+  /* Light-theme control boundary, same rationale and same composite sweep as
+     the dark token above. #747f8c: 4.07:1 at best (--input-bg on --panel),
+     3.55:1 at worst (--code-bg on --panel). */
+  --border-strong: #747f8c;
   --text: #1a2333; /* ~14:1 on white */
   --muted: #3e4a5b; /* ~8.6:1 on white */
   --accept: #096636; /* ~7.0:1 — also used as border/tint */
@@ -175,6 +190,15 @@ button {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0.48rem 0.65rem;
+}
+
+/* Control boundaries only (WCAG 2.1 SC 1.4.11). --input-bg composites to within
+   ~1.1:1 of the --panel behind it, so this border is the only thing delineating
+   a field. --line is a 12-16% alpha wash and lands at ~1.37-1.39:1 there.
+   Buttons keep --line deliberately: they are filled and self-delineating. */
+input,
+select {
+  border-color: var(--border-strong);
 }
 
 select {
