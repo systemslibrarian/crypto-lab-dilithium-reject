@@ -17,8 +17,7 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 async function neutralizeMotion(page: Page): Promise<void> {
   await page.addStyleTag({
-    content:
-      '*, *::before, *::after { animation: none !important; transition: none !important; }',
+    content: '*, *::before, *::after { animation: none !important; transition: none !important; }',
   });
 }
 
@@ -73,4 +72,14 @@ test('no WCAG A/AA violations in light theme', async ({ page }) => {
   await page.locator('#cl-theme-toggle').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await runSuite(page);
+});
+
+test('per-check example reports a fresh measured signing-loop value', async ({ page }) => {
+  await page.goto('.');
+  await page.locator('button[data-check="hint"]').click();
+  const evidence = page.locator('#ex-hint');
+  await expect(evidence).toContainText('Fresh real ML-DSA-65 signature');
+  await expect(evidence).toContainText('Measured:');
+  await expect(evidence).toContainText('Threshold:');
+  await expect(evidence).toContainText(/Check: (PASS|REJECT)/);
 });

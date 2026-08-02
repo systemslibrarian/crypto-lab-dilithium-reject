@@ -6,7 +6,7 @@ import { type MlDsaPresetName, type RealIterationRecord } from './real-sign';
 import { downloadChartPng, downloadChartSvg, downloadCsv } from './chart-export';
 import { buildShareUrl, parseUrlState } from './url-state';
 import { createTour, type TourStep } from './tour';
-import { ML_DSA_65, expandMask, lowBits, randomBytes, randomInt, sampleInBall, setSeed } from './mldsa-primitives';
+import { ML_DSA_65, randomBytes, randomInt, setSeed } from './mldsa-primitives';
 import {
   type Bin,
   type CdfPoint,
@@ -122,7 +122,7 @@ app.innerHTML = `
 
   <section class="card">
     <h2>Exhibit 1: Watch the Loop</h2>
-    <p class="meta">Fixed at ML-DSA-65. Each run executes the <strong>real</strong> FIPS 204 rejection loop and streams every iteration it actually performed — the norms shown are computed from the live y + c·s₁ arithmetic, and the signature is the loop's own output (verify and tamper with it below).</p>
+    <p class="meta" id="exhibit1-scope">The <strong>Sign Once</strong> and <strong>Step</strong> controls are fixed at ML-DSA-65 and execute the real FIPS 204 rejection loop. Clicking a histogram bar may instead load a separately labelled trace for the histogram's selected preset. Every displayed norm comes from that trace's live arithmetic.</p>
     <div class="controls">
       <label for="message-input">Message</label>
       <input id="message-input" value="Transfer $1000 to Bob" aria-describedby="message-help" />
@@ -205,7 +205,7 @@ app.innerHTML = `
 
   <section class="card deep-dive">
     <h2>Exhibit 4: Why Each Check Exists</h2>
-    <p class="meta">Each rejection condition removes signatures that would leak information about the secret key or break verification. Click a check for a freshly sampled example.</p>
+    <p class="meta">Each rejection condition removes signatures that would leak information about the secret key or break verification. Click a check to generate a fresh real ML-DSA-65 signature and inspect its measured value.</p>
     <div class="check-grid" id="check-grid"></div>
   </section>
 
@@ -987,30 +987,26 @@ function renderCheckExplanations(): void {
   `;
 
   checkGrid.querySelectorAll<HTMLButtonElement>('button[data-check]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const kind = btn.dataset.check;
-      if (!kind) return;
-      if (kind === 'z') {
-        const y = expandMask(randomBytes(64), 0, ML_DSA_65.gamma1, ML_DSA_65.n);
-        const sample = y[0] ?? 0;
-        $<HTMLPreElement>('#ex-z').textContent =
-          `Example coefficient in y: ${sample}\nBound: ${ML_DSA_65.gamma1 - ML_DSA_65.beta}`;
-      }
-      if (kind === 'r0') {
-        const sample = lowBits(ML_DSA_65.gamma2 + 133, 2 * ML_DSA_65.gamma2);
-        $<HTMLPreElement>('#ex-r0').textContent =
-          `lowBits(gamma2 + 133) = ${sample}\nCheck threshold: ${ML_DSA_65.gamma2 - ML_DSA_65.beta}`;
-      }
-      if (kind === 'ct0') {
-        const c = sampleInBall(randomBytes(32), ML_DSA_65.tau, ML_DSA_65.n);
-        const nonzero = c.reduce((acc, cur) => acc + (cur !== 0 ? 1 : 0), 0);
-        $<HTMLPreElement>('#ex-ct0').textContent =
-          `SampleInBall nonzero positions: ${nonzero}\nct0 bound: ${ML_DSA_65.gamma2}`;
-      }
-      if (kind === 'hint') {
-        const simulatedWeight = ML_DSA_65.omega + 3;
-        $<HTMLPreElement>('#ex-hint').textContent =
-          `Simulated hint weight: ${simulatedWeight}\nomega: ${ML_DSA_65.omega}\nResult: REJECT`;
+      if (kind !== 'z' && kind !== 'r0' && kind !== 'ct0' && kind !== 'hint') return;
+      const output = $<HTMLPreElement>(`#ex-${kind}`);
+      btn.disabled = true;
+      output.textContent = 'Generating a fresh real ML-DSA-65 signature…';
+      try {
+        const { payload } = await runRealSign();
+        const record = payload.iterations.find((candidate) => candidate[kind] !== null);
+        const check = record?.[kind];
+        if (!record || !check) throw new Error('The instrumented signing loop did not return this check');
+        output.textContent =
+          `Fresh real ML-DSA-65 signature\n` +
+          `Measured: ${check.value}\nThreshold: ${check.threshold}\n` +
+          `Check: ${check.pass ? 'PASS' : 'REJECT'}\n` +
+          `Iteration κ=${record.kappa}: ${record.result}${record.rejectionReason ? ` (${record.rejectionReason})` : ''}`;
+      } catch (error) {
+        output.textContent = `Could not generate the real example: ${error instanceof Error ? error.message : String(error)}`;
+      } finally {
+        btn.disabled = false;
       }
     });
   });

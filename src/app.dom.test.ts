@@ -85,6 +85,13 @@ describe('rendered app', () => {
     expect(document.querySelector('#stats')?.textContent).toContain('real signing loop');
   });
 
+  it('distinguishes fixed ML-DSA-65 controls from selected-preset histogram traces', () => {
+    const scope = document.querySelector('#exhibit1-scope')?.textContent ?? '';
+    expect(scope).toContain('Sign Once');
+    expect(scope).toContain('fixed at ML-DSA-65');
+    expect(scope).toContain("histogram's selected preset");
+  });
+
   it('exposes a single banner-free main landmark and labelled regions', () => {
     expect(document.querySelector('main#main-content')).not.toBeNull();
     // The iteration feed is a labelled log; charts expose role="img" labels.
