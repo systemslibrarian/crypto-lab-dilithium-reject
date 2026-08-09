@@ -73,7 +73,7 @@
       <button id="tamper-restore" type="button">Restore original</button>
       <span id="tamper-result" class="tamper-result" role="status" aria-live="polite"></span>
     </div>
-    <div id="iteration-feed" class="iteration-feed" role="log" aria-label="Signing iteration records"></div>
+    <div id="iteration-feed" class="iteration-feed" role="log" tabindex="0" aria-label="Signing iteration records"></div>
   </section>
 
   <section class="card">
@@ -138,7 +138,7 @@
 
   <section class="card">
     <h2>Exhibit 5: Comparing Signature Schemes</h2>
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0">
       <table>
         <caption>Signing characteristics across classical and post-quantum signature schemes. Timing figures are order-of-magnitude estimates for laptop-class hardware; consult library benchmarks for current values.</caption>
         <thead>
@@ -176,8 +176,13 @@
         <button id="guess-a" type="button">Population A is leaky</button>
         <button id="guess-b" type="button">Population B is leaky</button>
       </div>
-      <p id="leak-reveal" class="meta" role="status" aria-live="polite"></p>
     </div>
+    <!-- Deliberately OUTSIDE #leak-game. revealLeakGuess() closes the panel so
+         the answer cannot be re-guessed, and while this paragraph lived inside
+         it the verdict — "correct/not this one", which population leaked, and
+         both acceptance probabilities — was written and hidden in the same
+         tick, so the guessing game gave the reader no feedback at all. -->
+    <p id="leak-reveal" class="meta" role="status" aria-live="polite"></p>
     <pre id="distinguishability-output" class="dist-output" role="status" aria-live="polite"></pre>
     <h3 class="mini-h">Production mitigations</h3>
     <ul class="notes">
@@ -191,7 +196,7 @@
   <section class="card">
     <h2>Exhibit 7: Symbols &amp; Further Reading</h2>
     <div class="glossary-grid">
-      <div class="table-wrap">
+      <div class="table-wrap" tabindex="0">
         <table>
           <caption>Key symbols, with ML-DSA-65 values per FIPS 204 Table 1.</caption>
           <thead><tr><th scope="col">Symbol</th><th scope="col">Meaning</th><th scope="col">ML-DSA-65</th></tr></thead>
