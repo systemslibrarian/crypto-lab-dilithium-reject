@@ -11,13 +11,20 @@
      each with the cyan and pink halos applied, then --panel and --input-bg /
      --code-bg layered on: #657888 is 3.74:1 at worst (--panel under the cyan
      halo) and 4.08:1 at best. Keeps the deep-navy cool cast of the palette.
-     --line is unchanged for decorative rules: panel outlines, table and
-     section rules, SVG strokes, and buttons (which are filled, so their
-     boundary is not load-bearing). */
+     Buttons take it too — see the note on the `input, select, button` rule
+     below, which corrects the earlier claim that a button's fill delineated it.
+     --line is unchanged for decorative rules only: panel outlines, table and
+     section rules, and SVG grid strokes. */
   --border-strong: #657888;
   --text: #f2f8ff;
   --muted: #99abc2;
   --accept: #00ff88;
+  /* Ink twin of --accept, mirroring --reject-text. --accept is a FILL here (pill
+     and row tints, the ML-DSA-44 PMF stroke, the accepted card's border); this
+     is the value that has to clear 4.5:1 as TEXT sitting on those tints. In dark
+     they coincide: #00ff88 measures 7.91:1 on the accept-tinted pill inside an
+     accepted row — its worst surface — and 13.18:1 inside a rejected one. */
+  --accept-text: #00ff88;
   --reject: #ff3366;
   --reject-text: #ff8a9e; /* lighter tone: >=4.5:1 for pill text on reject-tinted rows */
   --z: #ff00aa;
@@ -46,7 +53,14 @@
   --border-strong: #747f8c;
   --text: #1a2333; /* ~14:1 on white */
   --muted: #3e4a5b; /* ~8.6:1 on white */
-  --accept: #096636; /* ~7.0:1 — also used as border/tint */
+  --accept: #096636; /* ~7.0:1 on white — used as border/tint, NOT as ink */
+  /* The hue --reject-text existed for and --accept did not. #096636 was tuned
+     against the white panel, but the PASS pill paints it on
+     color-mix(--accept 16%) over --code-bg over --panel — a green-tinted
+     surface two layers deeper — where it measured 4.12:1 (needs 4.5:1). #06552c
+     is 5.21:1 on that same composite (sampled from real pixels), 5.34:1 on the
+     rejected row's variant of it, and 8.96:1 on the plain panel. */
+  --accept-text: #06552c;
   --reject: #a40d33; /* ~7.1:1 */
   --reject-text: #8f0a2c; /* ~5.3:1 even on the 20% reject-tinted pill background */
   --z: #9c0566; /* ~7.3:1 */
@@ -64,6 +78,21 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* The `hidden` attribute is honoured only by a UA rule (`[hidden]{display:none}`),
+   which ANY author `display` declaration outranks. Two of this page's four
+   hidden regions carry one: `.seed-field` is an `.inline-check`
+   (`display: inline-flex`) and `#tamper-panel` is a `.tamper`
+   (`display: flex`). Both therefore rendered from first paint regardless of
+   `el.hidden`, which put the seed input on screen with reproducible mode off,
+   and — worse — put the tamper test's two buttons on screen before any
+   signature existed to tamper with, where both handlers open with
+   `if (!state.lastSig) return` and the controls silently do nothing. Restore
+   the attribute's meaning for every element, so `el.hidden = true` in main.ts
+   means what it reads as. */
+[hidden] {
+  display: none !important;
 }
 
 html {
@@ -103,6 +132,13 @@ body {
   margin: 0 auto;
   padding: 2rem 1rem 4rem;
   display: grid;
+  /* A single-column grid with no `grid-template-columns` is an implicit `auto`
+     track, and an `auto` track takes its items' MIN-CONTENT as a floor — so one
+     unbreakable run anywhere inside any card widened every card and pushed the
+     whole document sideways (594px of scroll width at a 380px viewport, WCAG
+     1.4.10). `minmax(0, 1fr)` removes the floor; the offending content then
+     wraps or scrolls inside its own box instead. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -115,15 +151,73 @@ body {
   animation: rise-in 260ms ease both;
 }
 
-.cl-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:clamp(1rem,4vw,3rem);flex-wrap:wrap;margin:clamp(1rem,3vw,2rem) 0 1.5rem;}
-.cl-hero-main{flex:1 1 22rem;min-width:min(100%,20rem);}
-.cl-hero-title{margin:0;font-size:clamp(1.6rem,3.8vw,2.7rem);font-weight:700;line-height:1.1;letter-spacing:.01em;font-family:'Space Grotesk','IBM Plex Sans',sans-serif;}
-.cl-hero-sub{margin:.4rem 0 0;font-size:clamp(.9rem,1.6vw,1.05rem);letter-spacing:.01em;opacity:.85;}
-.cl-hero-desc{margin:.55rem 0 0;font-size:1rem;line-height:1.5;color:var(--muted);max-width:60ch;}
-.cl-hero-why{flex:0 1 min(40%,26rem);min-width:min(100%,15rem);border:1px solid var(--line);border-radius:10px;padding:.85rem 1.05rem;background:color-mix(in oklab,var(--cyan) 6%,transparent);}
-.cl-hero-why-label{display:block;font-size:.68rem;font-weight:700;letter-spacing:.14em;color:var(--cyan);}
-.cl-hero-why-text{margin:.35rem 0 0;font-size:.95rem;line-height:1.5;color:var(--text);}
-@media (max-width:640px){.cl-hero{flex-direction:column;}.cl-hero-why{flex-basis:auto;width:100%;}.cl-hero-main{flex-basis:auto;min-width:0;}}
+.cl-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: clamp(1rem, 4vw, 3rem);
+  flex-wrap: wrap;
+  margin: clamp(1rem, 3vw, 2rem) 0 1.5rem;
+}
+.cl-hero-main {
+  flex: 1 1 22rem;
+  min-width: min(100%, 20rem);
+}
+.cl-hero-title {
+  margin: 0;
+  font-size: clamp(1.6rem, 3.8vw, 2.7rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+}
+.cl-hero-sub {
+  margin: 0.4rem 0 0;
+  font-size: clamp(0.9rem, 1.6vw, 1.05rem);
+  letter-spacing: 0.01em;
+  opacity: 0.85;
+}
+.cl-hero-desc {
+  margin: 0.55rem 0 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 60ch;
+}
+.cl-hero-why {
+  flex: 0 1 min(40%, 26rem);
+  min-width: min(100%, 15rem);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.85rem 1.05rem;
+  background: color-mix(in oklab, var(--cyan) 6%, transparent);
+}
+.cl-hero-why-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--cyan);
+}
+.cl-hero-why-text {
+  margin: 0.35rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+@media (max-width: 640px) {
+  .cl-hero {
+    flex-direction: column;
+  }
+  .cl-hero-why {
+    flex-basis: auto;
+    width: 100%;
+  }
+  .cl-hero-main {
+    flex-basis: auto;
+    min-width: 0;
+  }
+}
 
 .hero-tags {
   display: flex;
@@ -194,10 +288,17 @@ button {
 
 /* Control boundaries only (WCAG 2.1 SC 1.4.11). --input-bg composites to within
    ~1.1:1 of the --panel behind it, so this border is the only thing delineating
-   a field. --line is a 12-16% alpha wash and lands at ~1.37-1.39:1 there.
-   Buttons keep --line deliberately: they are filled and self-delineating. */
+   a field. --line is a 12-16% alpha wash and lands at ~1.28-1.38:1 there.
+   Buttons used to be excluded here, on the reasoning that "they are filled and
+   self-delineating". They are not: buttons take the same --input-bg as the
+   fields, so a button's fill measures 1.07:1 against the card in dark and
+   1.01:1 in light — sampled from real pixels, not derived — and its --line
+   border 1.28:1 / 1.38:1. Nothing on screen said where the button was. They now
+   share the field boundary, which the token's own sweep puts at 3.86:1 (dark)
+   and 4.03:1 (light) against the card surface. */
 input,
-select {
+select,
+button {
   border-color: var(--border-strong);
 }
 
@@ -219,7 +320,12 @@ button[disabled] {
 input:focus-visible,
 select:focus-visible,
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+/* Two scrolling regions carry tabindex="0" so arrow keys can reach their
+   overflow (WCAG 2.1.1); a focus target with no visible ring is a 2.4.7
+   failure, so they take the same one. */
+.iteration-feed:focus-visible,
+.table-wrap:focus-visible {
   outline: 3px solid var(--gold);
   outline-offset: 2px;
 }
@@ -243,6 +349,11 @@ button:hover {
 .secret {
   color: var(--reject);
   letter-spacing: 0.12em;
+  /* Thirty U+2588 blocks with no break opportunity in them: a 538px unbreakable
+     run that was the actual min-content floor the grid track above was picking
+     up. `anywhere` (not `break-word`, which does not shrink min-content) lets
+     the redaction bar wrap. */
+  overflow-wrap: anywhere;
 }
 
 .summary {
@@ -325,7 +436,7 @@ button:hover {
 }
 
 .status-accepted {
-  color: var(--accept);
+  color: var(--accept-text);
   background-color: color-mix(in srgb, var(--accept) 14%, transparent);
 }
 
@@ -380,7 +491,7 @@ button:hover {
 }
 
 .check.pass .check-pill {
-  color: var(--accept);
+  color: var(--accept-text);
   background-color: color-mix(in srgb, var(--accept) 16%, transparent);
 }
 
@@ -707,7 +818,7 @@ input[type='range'] {
 }
 
 .tamper-result.ok {
-  color: var(--accept);
+  color: var(--accept-text);
 }
 
 .tamper-result.bad {
@@ -1002,12 +1113,19 @@ td {
   border-radius: 12px;
 }
 
-.leak-game .ok,
-#leak-reveal.ok {
-  color: var(--accept);
+/* Lives OUTSIDE #leak-game (see main.ts): the panel is hidden the instant a
+   guess is made, and while the reveal was inside it the verdict was written and
+   hidden in the same tick. An empty <p> generates no line box, so this costs no
+   space before the first guess and the live region never has to appear or
+   disappear in order to announce. */
+#leak-reveal {
+  margin: 0.6rem 0 0;
 }
 
-.leak-game .bad,
+#leak-reveal.ok {
+  color: var(--accept-text);
+}
+
 #leak-reveal.bad {
   color: var(--reject);
 }
@@ -1102,7 +1220,7 @@ td {
 
 .tour-quiz-option.quiz-correct {
   border-color: var(--accept);
-  color: var(--accept);
+  color: var(--accept-text);
 }
 
 .tour-quiz-option.quiz-incorrect {
@@ -1117,7 +1235,7 @@ td {
 }
 
 .tour-quiz-feedback.ok {
-  color: var(--accept);
+  color: var(--accept-text);
 }
 
 .tour-quiz-feedback.bad {

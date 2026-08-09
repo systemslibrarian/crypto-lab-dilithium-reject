@@ -502,6 +502,10 @@ test('the leaky positive control is detected, named, and scored against the gues
   expect(before).toContain('acceptance probability depends on the secret key');
 
   await page.locator('#guess-a').click();
+  // Visible, not merely present: this paragraph used to sit inside #leak-game,
+  // which revealLeakGuess() hides in the same tick, so the verdict was written
+  // and immediately hidden and a textContent-only assertion could not tell.
+  await expect(page.locator('#leak-reveal')).toBeVisible();
   const reveal = (await page.locator('#leak-reveal').textContent()) ?? '';
   const named = /population ([AB]) is the leaky signer/.exec(reveal);
   expect(named, `reveal did not name the leaky population: ${reveal}`).not.toBeNull();
@@ -579,4 +583,30 @@ test('a shared link restores the state it encodes and replays the same trace', a
   await expect(page.locator('#iteration-feed article.iteration')).toHaveCount(again, { timeout: HEAVY });
   expect(again).toBe(accepted);
   expect(await feedFingerprints(page)).toEqual(trace);
+});
+
+test('each per-check example reports a freshly measured value from the real signing loop', async ({ page }) => {
+  test.setTimeout(HEAVY);
+  await page.goto('.');
+
+  // Exhibit 4's four buttons each sign a fresh real ML-DSA-65 signature and
+  // print the norm that check actually computed, so the printed verdict has to
+  // follow from the printed measurement and threshold — not from a fixed
+  // string. This moved here from the a11y spec, which had no business holding
+  // a claims assertion.
+  for (const kind of ['z', 'r0', 'ct0', 'hint'] as const) {
+    await page.locator(`button[data-check="${kind}"]`).click();
+    const evidence = page.locator(`#ex-${kind}`);
+    await expect(evidence).toContainText('Fresh real ML-DSA-65 signature', { timeout: HEAVY });
+
+    const text = (await evidence.textContent()) ?? '';
+    const measured = firstNumber(/Measured: (-?[\d,]+)/.exec(text)?.[1] ?? null);
+    const threshold = firstNumber(/Threshold: (-?[\d,]+)/.exec(text)?.[1] ?? null);
+    const verdict = /Check: (PASS|REJECT)/.exec(text)?.[1];
+
+    // Every one of the four bounds is "the measured norm must stay under the
+    // threshold"; wt(h) <= omega is the one inclusive case.
+    const passes = kind === 'hint' ? measured <= threshold : measured < threshold;
+    expect(verdict, `${kind}: ${measured} vs ${threshold}`).toBe(passes ? 'PASS' : 'REJECT');
+  }
 });
