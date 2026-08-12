@@ -321,8 +321,26 @@ export function reportCollected(): void {
 async function expectScrollersReachableSoft(page: Page, label: string): Promise<void> {
   if (!COLLECTING) return expectScrollersReachable(page, label);
   try {
+    await expectScrollersReachable(page, label);
+  } catch (e) {
+    record(String(e).slice(0, 900));
+  }
+}
+
+/**
+ * The 1.4.11 oracle, soft-wrapped like every other check in `scan`.
+ *
+ * This used to be called from inside `expectScrollersReachableSoft`, AFTER that
+ * function's `if (!COLLECTING) return` early exit — so in a normal (strict) run
+ * it never executed at all, and `nontext.ts` was dead code. Every "no new
+ * non-text failures" claim made by a strict run of this gate was therefore
+ * vacuous, and the baseline captured under it was empty because nothing had
+ * ever looked. It is now called from `scan` itself, at every driven state.
+ */
+async function expectNoNewNonTextFailuresSoft(page: Page, label: string): Promise<void> {
+  if (!COLLECTING) return expectNoNewNonTextFailures(page, label);
+  try {
     await expectNoNewNonTextFailures(page, label);
-  await expectScrollersReachable(page, label);
   } catch (e) {
     record(String(e).slice(0, 900));
   }
@@ -447,6 +465,7 @@ export async function scan(page: Page, label: string): Promise<void> {
   const contrast = Array.from(new Set(formatContrastFailures(await auditContrast(page))));
   softExpect(contrast, `measured contrast failures in state: ${label}`, []);
 
+  await expectNoNewNonTextFailuresSoft(page, label);
   await expectScrollersReachableSoft(page, label);
   await expectNoHorizontalOverflowSoft(page, label);
 }

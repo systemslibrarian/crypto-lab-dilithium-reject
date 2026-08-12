@@ -68,7 +68,13 @@
   .cl-btn{
     display:inline-flex;align-items:center;gap:.4rem;
     padding:.5rem .85rem;border-radius:10px;
-    border:1px solid color-mix(in srgb, var(--accent, #35d6bb) 38%, transparent);
+    /* WCAG 1.4.11. These are ghost buttons — `background: transparent` — so the
+       border is the ENTIRE control boundary and has to clear 3:1 on its own
+       against the bar, which is #0b1512 regardless of page theme. At the old 38%
+       the composite measured 2.45:1; this lab defines no --accent, so the
+       fallback #35d6bb applies, and 55% of it over the bar is 3.84:1. Hover
+       still goes to the full accent (10.16:1). */
+    border:1px solid color-mix(in srgb, var(--accent, #35d6bb) 55%, transparent);
     background:transparent;color:var(--cl-ink);cursor:pointer;
     font:inherit;font-size:.78rem;font-weight:700;letter-spacing:.1em;
     text-transform:uppercase;text-decoration:none;transition:background .15s,border-color .15s,color .15s;
