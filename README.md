@@ -28,7 +28,7 @@ Learning aids:
 - **Chart exports**: SVG/PNG for slides, CSV of iteration counts and timing data
 - An **exploratory `p` slider** (clearly labelled as simulation) to drag the acceptance probability and watch the geometric curve move, plus a **compare-presets overlay** of the three parameter sets' theoretical curves
 
-Plus: comparison table across Ed25519/ECDSA/ML-DSA/SLH-DSA/FALCON/LMS, an exhibit explaining why each check exists in FIPS 204, a symbols glossary with further-reading links, dark/light themes (AA/AAA contrast), keyboard + screen-reader support (verified by an axe-core test), and `prefers-reduced-motion` handling.
+Plus: comparison table across Ed25519/ECDSA/ML-DSA/SLH-DSA/FALCON/LMS, an exhibit explaining why each check exists in FIPS 204, a symbols glossary with further-reading links, a dark theme (AA/AAA contrast), keyboard + screen-reader support (verified by an axe-core test), and `prefers-reduced-motion` handling.
 
 ## When to Use It
 
