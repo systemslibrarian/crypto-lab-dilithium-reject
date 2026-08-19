@@ -13,10 +13,7 @@
  * outside its host and the oracle measures it against the host's backdrop, so
  * that ratio is NOT trustworthy — hand-measure before acting on it.
  */
-export const NONTEXT_BASELINE: Record<
-  string,
-  { ratio: number; required: number; unverified: boolean }
-> = {
+export const NONTEXT_BASELINE: Record<string, { ratio: number; required: number; unverified: boolean }> = {
   // Empty, and that is the goal state: no known 1.4.11 or generated-content
   // findings. Any that appear will fail the gate outright.
 };

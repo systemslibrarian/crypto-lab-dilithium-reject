@@ -831,11 +831,34 @@ input[type='range'] {
   cursor: pointer;
 }
 
-.hist-svg .bar-g:focus-visible {
-  outline: none;
+/* A bar's `<g>` carries the role, the tabindex and the click target, but paints
+   nothing itself — the `<rect class="hbar">` inside it holds all the ink. So the
+   `<g>` has no fill and no border to delineate it, and the focus ring is its
+   ONLY boundary (WCAG 1.4.11, 3:1).
+
+   This used to read `outline: none` under `:focus-visible`, on the theory that
+   brightening the bar was indicator enough. Two things were wrong with it.
+   `:focus-visible` does not match when focus arrives by CLICK on this element,
+   so neither the reset nor the brightening applied then, and what a visitor got
+   instead was the browser's own ring in the browser's own colour — measured at
+   1.00:1 against the chart on the Linux runner the site deploys from, i.e. no
+   visible boundary at all. And even when it did apply, cyan-to-cyan+28%-white is
+   about 1.3:1: too small a change to carry a focus indicator on its own.
+
+   Both routes to focus now take the lab's own ring, the same gold every other
+   focusable control here uses. Measured off the rendered chart — gold #ffd700
+   on the composited backdrop rgb(9, 16, 24) — it is 13.62:1.
+
+   2px at a 1px offset, not the 3px/2px the form controls take: neighbouring
+   bars are 13.1px apart at desktop and 2.8px apart at 380px, so 3px of ring per
+   side sits inside the gap on a wide screen and only just grazes the next bar
+   on a phone, where 5px per side would have swallowed it. */
+.hist-svg .bar-g:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
 }
 
-.hist-svg .bar-g:focus-visible .hbar,
+.hist-svg .bar-g:focus .hbar,
 .hist-svg .bar-g:hover .hbar {
   fill: color-mix(in srgb, var(--cyan) 72%, white);
 }

@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page } from '@playwright/test';
 import { auditContrast, formatContrastFailures } from './contrast';
-import { auditNonText, formatNonTextFailures, type NonTextFailure } from './nontext';
+import { auditNonText } from './nontext';
 import { NONTEXT_BASELINE } from './nontext-baseline';
 
 export const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];

@@ -103,7 +103,7 @@ export async function auditNonText(page: Page, within = 'body *'): Promise<NonTe
       const cached = (el as unknown as { __sc?: Map<string, CSSStyleDeclaration> }).__sc?.get(key);
       if (cached) return cached;
       const cs = getComputedStyle(el, pseudo);
-      const holder = (el as unknown as { __sc?: Map<string, CSSStyleDeclaration> });
+      const holder = el as unknown as { __sc?: Map<string, CSSStyleDeclaration> };
       if (!holder.__sc) holder.__sc = new Map();
       holder.__sc.set(key, cs);
       return cs;
@@ -395,8 +395,7 @@ export async function auditNonText(page: Page, within = 'body *'): Promise<NonTe
      * `contrast.ts`, so it borrows that file's gradient-aware sampler wholesale
      * rather than approximating it a second time.
      */
-    const ownPaint = (cs: CSSStyleDeclaration, rect: DOMRect, p: Point): RGBA =>
-      paintAt(cs, rect, p);
+    const ownPaint = (cs: CSSStyleDeclaration, rect: DOMRect, p: Point): RGBA => paintAt(cs, rect, p);
 
     /** The canvas background, which paints beyond the root's own box. */
     const canvasBackground = ((): RGBA => {
@@ -516,7 +515,7 @@ export async function auditNonText(page: Page, within = 'body *'): Promise<NonTe
       // then every pixel is theirs to answer for.
       const appearance = cs.appearance || (cs as unknown as { webkitAppearance?: string }).webkitAppearance || 'none';
       const nativeWidget = ['checkbox', 'radio', 'range', 'color', 'file'].includes(
-        (el as HTMLInputElement).type ?? ''
+        (el as HTMLInputElement).type ?? '',
       );
       if (appearance !== 'none' && nativeWidget) continue;
 
@@ -626,7 +625,5 @@ export async function auditNonText(page: Page, within = 'body *'): Promise<NonTe
 }
 
 export function formatNonTextFailures(failures: NonTextFailure[]): string[] {
-  return failures.map(
-    (f) => `${f.ratio}:1 (needs ${f.required}:1) [${f.kind}] ${f.selector} — ${f.detail}`
-  );
+  return failures.map((f) => `${f.ratio}:1 (needs ${f.required}:1) [${f.kind}] ${f.selector} — ${f.detail}`);
 }
