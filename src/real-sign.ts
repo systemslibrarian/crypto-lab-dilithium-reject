@@ -163,7 +163,7 @@ const MultiplyNTTs = (a: Poly, b: Poly): Poly => {
 /** Sample a polynomial in NTT form via rejection from an XOF block stream. */
 function RejNTTPoly(xof: () => Uint8Array): Poly {
   const r = newPoly(N);
-  for (let j = 0; j < N; ) {
+  for (let j = 0; j < N;) {
     const b = xof();
     if (b.length % 3) throw new Error('RejNTTPoly: unaligned block');
     for (let i = 0; j < N && i <= b.length - 3; i += 3) {
@@ -269,7 +269,7 @@ function createInstrumentedSigner(params: InstrumentedParams): InstrumentedSignF
     const masks = buf.slice(0, 8);
     for (let i = N - TAU, pos = 8, maskPos = 0, maskBit = 0; i < N; i++) {
       let b = i + 1;
-      for (; b > i; ) {
+      for (; b > i;) {
         b = buf[pos++] ?? 0;
         if (pos < shake256.blockLen) continue;
         s.xofInto(buf);
@@ -345,7 +345,7 @@ function createInstrumentedSigner(params: InstrumentedParams): InstrumentedSignF
     const r0Threshold = GAMMA2 - BETA;
     const ct0Threshold = GAMMA2;
 
-    main_loop: for (let kappa = 0; ; ) {
+    main_loop: for (let kappa = 0; ;) {
       if (iterations.length >= maxIterations) {
         x256.clean();
         throw new Error(`rejection loop exceeded ${maxIterations} iterations`);
