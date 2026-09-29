@@ -83,10 +83,12 @@ npm run dev
 ## Related Demos
 
 - [crypto-lab-dilithium-seal](https://systemslibrarian.github.io/crypto-lab-dilithium-seal/) — the same ML-DSA primitive applied to signing and document sealing.
-- [crypto-lab-falcon-seal](https://systemslibrarian.github.io/crypto-lab-falcon-seal/) — Falcon (FN-DSA), the other lattice signature standardized by NIST.
+- [crypto-lab-falcon-seal](https://systemslibrarian.github.io/crypto-lab-falcon-seal/) — Falcon (FN-DSA), the other lattice signature NIST **selected**. FIPS 206 has not been drafted yet, so FN-DSA is a selected-and-named algorithm rather than a published standard.[^fips206]
 - [crypto-lab-sphincs-ledger](https://systemslibrarian.github.io/crypto-lab-sphincs-ledger/) — SLH-DSA (FIPS 205), the hash-based PQC signature alternative.
 - [crypto-lab-hybrid-sign](https://systemslibrarian.github.io/crypto-lab-hybrid-sign/) — composite Ed25519 + ML-DSA-65 signatures for migration.
 - [crypto-lab-kyber-vault](https://systemslibrarian.github.io/crypto-lab-kyber-vault/) — ML-KEM (FIPS 203), the lattice KEM companion to ML-DSA.
+
+[^fips206]: NIST's [PQC standardization project](https://csrc.nist.gov/projects/post-quantum-cryptography/post-quantum-cryptography-standardization) lists FN-DSA as "FIPS 206 (in development)", and FIPS 206 does not appear in the [CSRC FIPS publications list](https://csrc.nist.gov/publications/fips) at all — which holds FIPS 203, 204 and 205 as final (2024-08-13). Verified against CSRC 2026-09-29.
 
 ## How This Demo Works (Important)
 
