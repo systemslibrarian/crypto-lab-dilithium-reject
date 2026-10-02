@@ -8,10 +8,21 @@ name: Deploy
 # either file ran, on pull requests too, and `dependabot-auto-merge` needs it.
 # ci.yml is gone -- a second copy of a gate is how the two drift apart.
 #
-# Build and publish stay in one job because this lab publishes with
-# peaceiris/actions-gh-pages to the gh-pages branch. Only the PUBLISH STEP is
-# gated off for pull requests, never the job: gating the job would switch the
-# PR gate itself off.
+# This lab used to publish with peaceiris/actions-gh-pages, pushing dist/ to a
+# gh-pages branch, and that is why its live site served a build from 2026-07-11
+# for nearly three months while every check was green. The repository's Pages
+# source is `build_type: workflow`, which serves ONLY what an actions/deploy-pages
+# step uploads -- so each run updated the gh-pages branch and nothing served it.
+# The branch even carried the fix the live CSS was missing. It published into a
+# branch no one reads.
+#
+# Two checkers were blind to it for the same reason: deploy-sync keeps a lab only
+# if a workflow mentions `deploy-pages`, and gate-sync learned peaceiris in
+# 2026-09-10 but judges the gate, not whether the publish reaches the site.
+#
+# So this now publishes the way 193 labs in the fleet do: `build` uploads a Pages
+# artifact, `deploy` consumes it. Both jobs are visible to every checker, and the
+# shape is the one audits/_MASTER-TEMPLATE.md 6.1-6.2 specifies.
 on:
   push:
     branches: [main]
@@ -23,10 +34,8 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,23 +55,35 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Accessibility gate (axe-core, WCAG A/AA)
         run: npm run test:a11y
-      # NOT `== 'push'`. That would also skip workflow_dispatch, which is the one
-      # trigger the post-auto-merge deploy depends on: the dispatched run would
-      # build, pass the gate, and skip the publish, so the site would still never
-      # update.
-      - if: github.event_name != 'pull_request'
-        uses: peaceiris/actions-gh-pages@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: ./dist
+          path: dist
 
-  # Dependabot only. `needs: deploy` is the whole safety argument -- a bump can
+  # NOT `== 'push'`. That would also skip workflow_dispatch, which is the one
+  # trigger the post-auto-merge deploy depends on: the dispatched run would
+  # build, pass the gate, and skip the publish, so the site would still never
+  # update.
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  # Dependabot only. `needs: build` is the whole safety argument -- a bump can
   # merge itself only once this lab's entire PR gate went green, so the gate
   # decides rather than the version number. A major that actually breaks the
-  # lab fails the gate and the PR stays open for a human.
+  # lab fails the gate and the PR stays open for a human. `build` is the gate the
+  # `deploy` job above also depends on, so they cannot be different gates.
   dependabot-auto-merge:
-    needs: deploy
+    needs: build
     if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
