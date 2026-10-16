@@ -33,6 +33,14 @@ beforeAll(async () => {
 });
 
 describe('rendered app', () => {
+  it('separates corrected references from the measured histogram and links the preprint', () => {
+    const note = document.querySelector('#iteration-reference');
+    expect(note?.textContent).toContain('4.36 / 5.14 / 3.91');
+    expect(note?.textContent).toContain('potential updates');
+    expect(note?.textContent).toContain('mean can differ');
+    expect(note?.querySelector('a')?.href).toBe('https://eprint.iacr.org/2026/2456');
+  });
+
   it('renders all seven exhibits', () => {
     const headings = [...document.querySelectorAll('h2')].map((h) => h.textContent ?? '');
     expect(headings).toHaveLength(7);

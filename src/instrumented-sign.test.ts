@@ -25,6 +25,16 @@ async function meanIterations(preset: PresetName, runs: number): Promise<number>
 }
 
 describe('simulation calibration', () => {
+  it('uses the all-four-check reference means, not the older two-check estimates', () => {
+    for (const [preset, mean] of [
+      ['ML-DSA-44', 4.36],
+      ['ML-DSA-65', 5.14],
+      ['ML-DSA-87', 3.91],
+    ] as const) {
+      expect(1 / PRESETS[preset].acceptance).toBeCloseTo(mean, 10);
+    }
+  });
+
   for (const preset of PRESET_NAMES) {
     it(`${preset}: mean iterations ≈ 1 / acceptance (±15%)`, async () => {
       const runs = 800;
@@ -36,7 +46,7 @@ describe('simulation calibration', () => {
     }, 30000);
   }
 
-  it('rejection-reason mix matches the published proportions (ML-DSA-65)', async () => {
+  it('rejection-reason mix matches the illustrative proportions (ML-DSA-65)', async () => {
     const counts: Record<string, number> = { z_too_large: 0, r0_too_large: 0, ct0_too_large: 0, hint_too_dense: 0 };
     let total = 0;
     for (let i = 0; i < 800; i += 1) {
