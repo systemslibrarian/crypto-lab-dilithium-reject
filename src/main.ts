@@ -151,6 +151,7 @@ app.innerHTML = `
 
   <section class="card">
     <h2>Exhibit 2: Histogram of Iterations</h2>
+    <p class="meta" id="iteration-reference"><strong>Reference estimates:</strong> ML-DSA-44 / -65 / -87 average <strong>${(1 / PRESETS['ML-DSA-44'].acceptance).toFixed(2)} / ${(1 / PRESETS['ML-DSA-65'].acceptance).toFixed(2)} / ${(1 / PRESETS['ML-DSA-87'].acceptance).toFixed(2)}</strong> iterations when all four checks are accounted for. <a href="https://eprint.iacr.org/2026/2456" target="_blank" rel="noopener">Kwiatkowski's preprint (received 12 October, approved 14 October 2026)</a> corrects the older Table 1 estimates. <a href="https://csrc.nist.gov/pubs/fips/204/final" target="_blank" rel="noopener">NIST lists potential updates</a>, not a new final FIPS edition. This is a performance correction, not a security break. The histogram below measures this batch; its mean can differ from the reference.</p>
     <p class="meta">Each bar counts <strong>real signatures</strong>: the batch runs the actual instrumented signing loop and records how many candidates each signature needed. Iteration count until acceptance behaves like a <strong>geometric random variable</strong> — each draw is (approximately) an independent trial with the same accept probability — so the bars should track the dotted geometric PMF with mean 1/p̂, where p̂ is <em>measured</em> from the batch. Tip: click a bar to hunt for a real trace of exactly that length.</p>
     <div class="controls">
       <label for="preset-select">Preset</label>
@@ -808,7 +809,7 @@ function renderHistogram(): void {
   const pHat = measuredAcceptance();
   const observedMean = sampleMean(data);
   const theoreticalMean = geometricMean(p);
-  const publishedP = PRESETS[state.currentPreset].acceptance;
+  const referenceP = PRESETS[state.currentPreset].acceptance;
   const tailK = 8;
   const tailTheory = (1 - p) ** tailK;
   const tailObserved = data.length > 0 ? data.filter((v) => v > tailK).length / data.length : null;
@@ -816,7 +817,7 @@ function renderHistogram(): void {
     <div><span class="k">Source</span><span class="v">${isSim ? 'simulation (custom p)' : 'real signing loop'}</span></div>
     <div><span class="k">Preset</span><span class="v">${state.currentPreset}${isSim ? ' (custom p)' : ''}</span></div>
     <div><span class="k">Runs</span><span class="v">${intFmt.format(state.histogramRuns)}</span></div>
-    <div><span class="k">${isSim ? 'p (slider)' : 'Measured p̂'}</span><span class="v">${isSim ? p.toFixed(2) : pHat !== null ? `${pHat.toFixed(3)} (ref ≈ ${publishedP.toFixed(2)})` : '—'}</span></div>
+    <div><span class="k">${isSim ? 'p (slider)' : 'Measured p̂'}</span><span class="v">${isSim ? p.toFixed(2) : pHat !== null ? `${pHat.toFixed(3)} (ref ≈ ${referenceP.toFixed(3)})` : '—'}</span></div>
     <div><span class="k">Observed mean</span><span class="v">${fmt.format(observedMean)}</span></div>
     <div><span class="k">Mean 1/p${isSim ? '' : '̂'}</span><span class="v">${fmt.format(theoreticalMean)}</span></div>
     <div><span class="k">Median</span><span class="v">${fmt.format(quantile(data, 0.5))}</span></div>
@@ -1553,13 +1554,13 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: '.lab > section.card:nth-of-type(2)',
     title: 'Quick check: expected number of iterations',
-    body: `<p>ML-DSA-65 accepts each candidate with probability p ≈ 0.2 (the Dilithium spec's expected 5.1 repetitions — and what the real batch above measures).</p>`,
+    body: `<p>ML-DSA-65's corrected reference mean is about 5.14 iterations, corresponding to p ≈ 0.195. Your finite real batch can differ from this estimate.</p>`,
     quiz: {
       question: 'On average, how many iterations does one signature take?',
       options: ['About 1 — rejection is rare', 'About 5 (1/p)', 'About 20'],
       answer: 1,
       explain:
-        'the mean of a geometric distribution is 1/p ≈ 1/0.196 ≈ 5.1 — and the histogram’s mean marker sits right there.',
+        'the mean of a geometric distribution is 1/p: the corrected reference is about 5.14 iterations. The histogram marker uses the measured batch mean, which fluctuates.',
     },
   },
   {

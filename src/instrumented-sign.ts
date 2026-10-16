@@ -11,7 +11,7 @@
  *   - acceptance probability is fixed per preset to match published
  *     ML-DSA implementation results;
  *   - when a candidate is rejected, the rejection reason is sampled
- *     from the published reason mix and the displayed ||z||, ||r0||,
+ *     from an illustrative reason mix and the displayed ||z||, ||r0||,
  *     ||c*t0|| values are positioned above/below their thresholds
  *     consistently with that reason.
  *
@@ -43,16 +43,19 @@ interface PresetParams {
 }
 
 /**
- * Acceptance probabilities are 1 / (expected repetitions) from the Dilithium
- * specification (4.25 / 5.1 / 3.85 for levels 2/3/5) and match what this
- * demo's own real instrumented loop measures (p̂ ≈ 0.232 / 0.192 / 0.261 at
- * N=400). The rejection mixes are measured from the real loop too: z and r0
- * split the rejections roughly evenly, ct0 and the hint check almost never
- * fire.
+ * Reference acceptance probabilities are reciprocals of the rounded corrected
+ * means 4.36 / 5.14 / 3.91 for ML-DSA-44/65/87, accounting for all four checks.
+ * Source: Kwiatkowski, https://eprint.iacr.org/2026/2456 (preprint,
+ * received 2026-10-12, approved 2026-10-14). NIST lists potential FIPS 204
+ * updates, not a new final edition: https://csrc.nist.gov/pubs/fips/204/final.
+ * These references calibrate exploratory simulations and comparison overlays;
+ * real histogram means and acceptance are measured from actual signatures.
+ * The rejection mixes below remain illustrative, not probabilities derived
+ * from that paper; measured reason counts come from the real loop.
  */
 export const PRESETS: Record<PresetName, PresetParams> = {
   'ML-DSA-44': {
-    acceptance: 0.235,
+    acceptance: 1 / 4.36,
     rejectionMix: { z: 0.6, r0: 0.39, ct0: 0.005, hint: 0.005 },
     gamma1: 131072,
     gamma2: 95232,
@@ -60,7 +63,7 @@ export const PRESETS: Record<PresetName, PresetParams> = {
     omega: 80,
   },
   'ML-DSA-65': {
-    acceptance: 0.196,
+    acceptance: 1 / 5.14,
     rejectionMix: { z: 0.5, r0: 0.49, ct0: 0.005, hint: 0.005 },
     gamma1: ML_DSA_65.gamma1,
     gamma2: ML_DSA_65.gamma2,
@@ -68,7 +71,7 @@ export const PRESETS: Record<PresetName, PresetParams> = {
     omega: ML_DSA_65.omega,
   },
   'ML-DSA-87': {
-    acceptance: 0.26,
+    acceptance: 1 / 3.91,
     rejectionMix: { z: 0.44, r0: 0.55, ct0: 0.005, hint: 0.005 },
     gamma1: 524288,
     gamma2: 261888,

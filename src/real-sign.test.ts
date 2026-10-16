@@ -97,8 +97,8 @@ describe('real iteration records', () => {
       iterations += res.acceptedIteration;
     }
     const pHat = signatures / iterations;
-    // The Dilithium spec's expected repetitions for level 3 is 5.1, i.e.
-    // p ≈ 0.196; a wide band keeps the test meaningful without flaking at N=150.
+    // The corrected ML-DSA-65 reference mean is 5.14, i.e. p ≈ 0.195
+    // (ePrint 2026/2456); a wide band avoids flaking at N=150.
     expect(pHat).toBeGreaterThan(0.13);
     expect(pHat).toBeLessThan(0.28);
   }, 120000);
