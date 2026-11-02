@@ -80,6 +80,20 @@ export const PRESETS: Record<PresetName, PresetParams> = {
   },
 };
 
+/**
+ * The preset names, as a runtime check rather than a type assertion.
+ *
+ * Derived from PRESETS' own keys on purpose: a second hand-written list is a
+ * list that can disagree with this one, and the disagreement would be silent.
+ * Callers read a preset out of a URL or a <select>, which are both strings at
+ * runtime whatever the type says, and every one of them is interpolated into
+ * markup downstream -- so the narrowing has to actually happen, not be asserted.
+ */
+export function isPresetName(value: string): value is PresetName {
+  return Object.prototype.hasOwnProperty.call(PRESETS, value);
+}
+
+
 export interface IterationRecord {
   kappa: number;
   yStats: {

@@ -1,7 +1,13 @@
 import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
 import './style.css';
 import pkg from '../package.json';
-import { PRESETS, type IterationRecord, type PresetName, simulateTraceOfLength } from './instrumented-sign';
+import {
+  PRESETS,
+  type IterationRecord,
+  isPresetName,
+  type PresetName,
+  simulateTraceOfLength,
+} from './instrumented-sign';
 import { type MlDsaPresetName, type RealIterationRecord } from './real-sign';
 import { downloadChartPng, downloadChartSvg, downloadCsv } from './chart-export';
 import { buildShareUrl, parseUrlState } from './url-state';
@@ -72,7 +78,8 @@ const state: AppState = {
   iterationHistory: [],
   histogramRuns: 0,
   busy: false,
-  currentPreset: (urlState.preset as PresetName | undefined) ?? 'ML-DSA-65',
+  currentPreset:
+    urlState.preset !== undefined && isPresetName(urlState.preset) ? urlState.preset : 'ML-DSA-65',
   reasonBreakdown: new Map(),
   customAcceptance: urlState.customAcceptance ?? null,
   deterministic: urlState.deterministic ?? false,
@@ -1386,7 +1393,10 @@ presetSelect.addEventListener('change', () => {
     presetSelect.value = state.currentPreset;
     return;
   }
-  state.currentPreset = presetSelect.value as PresetName;
+  // The select's value is DOM text, and it reaches five innerHTML templates
+  // below. Check it instead of asserting it: an unknown value now leaves the
+  // preset where it was rather than being rendered into the page.
+  if (isPresetName(presetSelect.value)) state.currentPreset = presetSelect.value;
   state.iterationHistory = [];
   state.histogramRuns = 0;
   state.reasonBreakdown = new Map();

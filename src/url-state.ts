@@ -5,6 +5,8 @@
  * link replays the same real signature on any machine.
  */
 
+import { isPresetName } from './instrumented-sign';
+
 export interface ShareableState {
   preset: string;
   deterministic: boolean;
@@ -14,7 +16,6 @@ export interface ShareableState {
   tour: boolean;
 }
 
-const PRESET_NAMES = new Set(['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87']);
 const MAX_MESSAGE_LENGTH = 200;
 
 export function parseUrlState(search: string): Partial<ShareableState> {
@@ -22,7 +23,7 @@ export function parseUrlState(search: string): Partial<ShareableState> {
   const out: Partial<ShareableState> = {};
 
   const preset = params.get('preset');
-  if (preset && PRESET_NAMES.has(preset)) out.preset = preset;
+  if (preset && isPresetName(preset)) out.preset = preset;
 
   if (params.get('det') === '1') out.deterministic = true;
 

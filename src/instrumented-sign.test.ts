@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
 import {
   PRESETS,
+  isPresetName,
   type PresetName,
   instrumentedSign,
   simulateRejectionTrace,
@@ -109,6 +110,28 @@ describe('instrumentedSign output', () => {
     for (let i = 0; i < res.iterations.length - 1; i += 1) {
       expect(res.iterations[i]?.result).toBe('REJECTED');
       expect(res.iterations[i]?.rejectionReason).not.toBeNull();
+    }
+  });
+});
+
+describe('isPresetName', () => {
+  it('accepts exactly the presets PRESETS defines', () => {
+    for (const name of Object.keys(PRESETS)) {
+      expect(isPresetName(name), name).toBe(true);
+    }
+  });
+
+  it('rejects anything else, including markup and inherited object keys', () => {
+    for (const bad of [
+      '',
+      'ML-DSA-128',
+      'ml-dsa-65',
+      '<img src=x data-injected=yes>',
+      'toString',
+      'constructor',
+      '__proto__',
+    ]) {
+      expect(isPresetName(bad), bad).toBe(false);
     }
   });
 });
