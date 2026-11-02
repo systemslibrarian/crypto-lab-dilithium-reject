@@ -93,7 +93,6 @@ export function isPresetName(value: string): value is PresetName {
   return Object.prototype.hasOwnProperty.call(PRESETS, value);
 }
 
-
 export interface IterationRecord {
   kappa: number;
   yStats: {

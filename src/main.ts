@@ -78,8 +78,7 @@ const state: AppState = {
   iterationHistory: [],
   histogramRuns: 0,
   busy: false,
-  currentPreset:
-    urlState.preset !== undefined && isPresetName(urlState.preset) ? urlState.preset : 'ML-DSA-65',
+  currentPreset: urlState.preset !== undefined && isPresetName(urlState.preset) ? urlState.preset : 'ML-DSA-65',
   reasonBreakdown: new Map(),
   customAcceptance: urlState.customAcceptance ?? null,
   deterministic: urlState.deterministic ?? false,
@@ -629,7 +628,7 @@ async function showExampleTrace(k: number): Promise<void> {
 
     // Real mode: hunt for an actual signature that took exactly k iterations.
     iterationFeed.innerHTML = '';
-    signSummary.innerHTML = `<p>Hunting for a real ${state.currentPreset} signature that takes exactly <strong>${k}</strong> iterations…</p>`;
+    signSummary.innerHTML = `<p>Hunting for a real ${escapeHtml(state.currentPreset)} signature that takes exactly <strong>${k}</strong> iterations…</p>`;
     const res = await runJob<{ found: boolean; attempts: number; iterations?: RealIterationRecord[] }>(
       {
         kind: 'find-trace',
@@ -822,7 +821,7 @@ function renderHistogram(): void {
   const tailObserved = data.length > 0 ? data.filter((v) => v > tailK).length / data.length : null;
   statsRoot.innerHTML = `
     <div><span class="k">Source</span><span class="v">${isSim ? 'simulation (custom p)' : 'real signing loop'}</span></div>
-    <div><span class="k">Preset</span><span class="v">${state.currentPreset}${isSim ? ' (custom p)' : ''}</span></div>
+    <div><span class="k">Preset</span><span class="v">${escapeHtml(state.currentPreset)}${isSim ? ' (custom p)' : ''}</span></div>
     <div><span class="k">Runs</span><span class="v">${intFmt.format(state.histogramRuns)}</span></div>
     <div><span class="k">${isSim ? 'p (slider)' : 'Measured p̂'}</span><span class="v">${isSim ? p.toFixed(2) : pHat !== null ? `${pHat.toFixed(3)} (ref ≈ ${referenceP.toFixed(3)})` : '—'}</span></div>
     <div><span class="k">Observed mean</span><span class="v">${fmt.format(observedMean)}</span></div>
@@ -1132,7 +1131,7 @@ async function runHistogramBatch(count: number): Promise<void> {
     const isSim = state.customAcceptance !== null;
     const runningLabel = isSim
       ? `Simulating ${intFmt.format(count)} traces at p = ${state.customAcceptance?.toFixed(2)}`
-      : `Signing ${intFmt.format(count)} real ${state.currentPreset} signatures in the worker`;
+      : `Signing ${intFmt.format(count)} real ${escapeHtml(state.currentPreset)} signatures in the worker`;
     signSummary.innerHTML = `<p>${runningLabel}…</p>`;
     const request = isSim
       ? { kind: 'histogram-sim', count, preset: state.currentPreset, acceptance: state.customAcceptance }
@@ -1163,7 +1162,7 @@ async function runHistogramBatch(count: number): Promise<void> {
       ? `simulated at p = ${state.customAcceptance?.toFixed(2)}`
       : `real signatures · measured p̂ = ${payload.measuredAcceptance.toFixed(3)} this batch`;
     signSummary.innerHTML = `
-      <p>Batch complete: ${intFmt.format(count)} ${isSim ? 'traces' : 'signatures'} at <strong>${state.currentPreset}</strong> (${sourceNote}; ${intFmt.format(state.histogramRuns)} total).</p>
+      <p>Batch complete: ${intFmt.format(count)} ${isSim ? 'traces' : 'signatures'} at <strong>${escapeHtml(state.currentPreset)}</strong> (${sourceNote}; ${intFmt.format(state.histogramRuns)} total).</p>
       <p>Mean: ${payload.mean.toFixed(2)} · Median: ${payload.median.toFixed(2)} · P90: ${payload.p90.toFixed(2)} · P99: ${payload.p99.toFixed(2)} · Max: ${payload.max}</p>
     `;
   } catch (err) {
@@ -1393,9 +1392,12 @@ presetSelect.addEventListener('change', () => {
     presetSelect.value = state.currentPreset;
     return;
   }
-  // The select's value is DOM text, and it reaches five innerHTML templates
+  // The select's value is DOM text, and it reaches four innerHTML templates
   // below. Check it instead of asserting it: an unknown value now leaves the
-  // preset where it was rather than being rendered into the page.
+  // preset where it was rather than being rendered into the page. Those
+  // templates also escape it, because this narrowing is a type predicate and
+  // taint analysis does not read one as a barrier -- so the guard is the fix
+  // and the escape is what makes it locally evident at each sink.
   if (isPresetName(presetSelect.value)) state.currentPreset = presetSelect.value;
   state.iterationHistory = [];
   state.histogramRuns = 0;
