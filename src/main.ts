@@ -296,10 +296,10 @@ app.innerHTML = `
       <div class="reading">
         <h3 class="mini-h">Further reading</h3>
         <ul class="notes">
-          <li><a href="https://csrc.nist.gov/pubs/fips/204/final" target="_blank" rel="noopener">FIPS 204</a> — Module-Lattice-Based Digital Signature Standard (§ 6 signing, § 7.3 ExpandMask, § 8.5.3 SampleInBall).</li>
-          <li><a href="https://eprint.iacr.org/2009/285" target="_blank" rel="noopener">Lyubashevsky (ASIACRYPT 2009)</a> — Fiat-Shamir with Aborts, the origin of the rejection loop.</li>
+          <li><a href="https://csrc.nist.gov/pubs/fips/204/final" target="_blank" rel="noopener">FIPS 204</a> — Module-Lattice-Based Digital Signature Standard (§ 6 signing, § 7.3 ExpandMask (Algorithm 34) and SampleInBall (Algorithm 29)).</li>
+          <li><a href="https://doi.org/10.1007/978-3-642-10366-7_35" target="_blank" rel="noopener">Lyubashevsky (ASIACRYPT 2009)</a> — &ldquo;Fiat-Shamir with Aborts: Applications to Lattice and Factoring-Based Signatures&rdquo;, the origin of the rejection loop.</li>
           <li><a href="https://pq-crystals.org/dilithium/" target="_blank" rel="noopener">CRYSTALS-Dilithium</a> — the design ML-DSA standardizes.</li>
-          <li><a href="https://github.com/paulmillr/noble-post-quantum" target="_blank" rel="noopener">@noble/post-quantum</a> — the audited library that produces the real signatures here.</li>
+          <li><a href="https://github.com/paulmillr/noble-post-quantum" target="_blank" rel="noopener">@noble/post-quantum</a> — the library that produces the real signatures here. Its own README states &ldquo;The library has not been independently audited yet&rdquo;; it was self-audited at v0.6.1 in April 2026, which is earlier than the version shipped here.</li>
         </ul>
       </div>
     </div>

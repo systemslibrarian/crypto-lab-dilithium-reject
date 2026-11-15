@@ -138,7 +138,7 @@ export function lowBits(r: number, alpha: number): number {
 }
 
 /**
- * Real SampleInBall, structurally per FIPS 204 § 8.5.3.
+ * Real SampleInBall, structurally per FIPS 204 Algorithm 29 (§ 7.3).
  * Uses the didactic DeterministicStream above instead of SHAKE-256.
  */
 export function sampleInBall(cTilde: Uint8Array, tau: number, n: number): Polynomial {

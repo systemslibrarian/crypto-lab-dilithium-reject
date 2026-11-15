@@ -41,6 +41,28 @@ describe('rendered app', () => {
     expect(note?.querySelector('a')?.href).toBe('https://eprint.iacr.org/2026/2456');
   });
 
+  it('cites SampleInBall where FIPS 204 puts it, links the right Lyubashevsky paper, and does not call the signing library audited', () => {
+    const reading = document.querySelector('.reading')?.textContent ?? '';
+
+    // FIPS 204 defines SampleInBall as Algorithm 29 inside § 7.3 "Pseudorandom
+    // Sampling", alongside ExpandMask (Algorithm 34). The standard has no § 8
+    // at all — § 7.6 is the last section before the references.
+    expect(reading).toContain('§ 7.3 ExpandMask (Algorithm 34) and SampleInBall (Algorithm 29)');
+    expect(reading).not.toContain('8.5.3');
+
+    // eprint.iacr.org/2009/285 is Stehlé et al., "Efficient Public Key Encryption
+    // Based on Ideal Lattices" — a different paper. Fiat-Shamir with Aborts is
+    // Lyubashevsky, ASIACRYPT 2009, LNCS 5912 pp. 598-616.
+    const links = [...document.querySelectorAll<HTMLAnchorElement>('.reading a')].map((a) => a.href);
+    expect(links).toContain('https://doi.org/10.1007/978-3-642-10366-7_35');
+    expect(links.join(' ')).not.toContain('eprint.iacr.org/2009/285');
+
+    // @noble/post-quantum's own README: "The library has not been independently
+    // audited yet." Calling it "the audited library" overstated that.
+    expect(reading).toContain('has not been independently audited');
+    expect(reading).not.toContain('the audited library');
+  });
+
   it('renders all seven exhibits', () => {
     const headings = [...document.querySelectorAll('h2')].map((h) => h.textContent ?? '');
     expect(headings).toHaveLength(7);
