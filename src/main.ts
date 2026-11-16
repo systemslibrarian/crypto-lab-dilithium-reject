@@ -1507,24 +1507,6 @@ histogramRoot.addEventListener('keydown', (e) => {
   if (k > 0) void showExampleTrace(k);
 });
 
-const themeToggleButton = document.querySelector<HTMLButtonElement>('#theme-toggle');
-if (themeToggleButton) {
-  const updateLabel = (): void => {
-    const current = document.documentElement.getAttribute('data-theme') ?? 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
-    themeToggleButton.textContent = next === 'dark' ? 'Dark theme' : 'Light theme';
-    themeToggleButton.setAttribute('aria-label', `Switch to ${next} theme`);
-  };
-  updateLabel();
-  themeToggleButton.addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-theme') ?? 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
-    updateLabel();
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Guided tour
 // ---------------------------------------------------------------------------

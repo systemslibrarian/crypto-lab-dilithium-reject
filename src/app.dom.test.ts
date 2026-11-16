@@ -27,7 +27,6 @@ beforeAll(async () => {
   document.documentElement.setAttribute('data-theme', 'dark');
   document.body.innerHTML = `
     <a class="skip-link" href="#main-content">Skip to main content</a>
-    <button id="theme-toggle" type="button" aria-label="Toggle color theme">Theme</button>
     <div id="app"></div>`;
   await import('./main');
 });
@@ -97,6 +96,27 @@ describe('rendered app', () => {
       '#export-times-csv',
     ];
     for (const id of ids) expect(document.querySelector(id), id).not.toBeNull();
+  });
+
+  // Dark is the only theme, pinned by index.html before first paint. The
+  // fixture used to ship a #theme-toggle button and this suite used to let it
+  // through; the control is gone, so the assertion is inverted — the app
+  // renders no theme control and owns no theme state.
+  it('ships no theme control and never writes the theme', () => {
+    expect(
+      document.getElementById('theme-toggle'),
+      'a #theme-toggle element reappeared in the app or in this fixture',
+    ).toBeNull();
+    expect(
+      document.querySelectorAll('.theme-toggle, [data-theme-toggle], [aria-label="Toggle color theme"]').length,
+      'a theme control reappeared (.theme-toggle, [data-theme-toggle], or aria-label="Toggle color theme")',
+    ).toBe(0);
+    // The pre-paint pinning stays put: main.ts must neither flip it nor
+    // persist a preference of its own.
+    expect(document.documentElement.getAttribute('data-theme'), 'main.ts moved the theme off the pinned dark').toBe(
+      'dark',
+    );
+    expect(localStorage.getItem('theme'), 'main.ts wrote localStorage["theme"]').toBeNull();
   });
 
   it('starts and exits the guided tour', () => {
