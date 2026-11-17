@@ -55,8 +55,7 @@ export interface ControlNameFailure {
 export async function auditControlNames(page: Page): Promise<ControlNameFailure[]> {
   return page.evaluate(() => {
     const SKIP_INPUT_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image']);
-    const SELECTOR =
-      'input, select, textarea, [role="searchbox"], [role="combobox"], [role="textbox"]';
+    const SELECTOR = 'input, select, textarea, [role="searchbox"], [role="combobox"], [role="textbox"]';
 
     /**
      * A label's OWN text, with any nested form control removed first.
@@ -149,6 +148,6 @@ export function formatControlNameFailures(failures: ControlNameFailure[]): strin
   return failures.map((f) =>
     f.has.length === 0
       ? `${f.control} has no accessible name at all`
-      : `${f.control} is named only by ${f.has.join(', ')} — needs label[for], a wrapping <label>, aria-label or aria-labelledby`
+      : `${f.control} is named only by ${f.has.join(', ')} — needs label[for], a wrapping <label>, aria-label or aria-labelledby`,
   );
 }
