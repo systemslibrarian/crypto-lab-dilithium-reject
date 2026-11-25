@@ -10,7 +10,7 @@ import {
 } from './instrumented-sign';
 import { type MlDsaPresetName, type RealIterationRecord } from './real-sign';
 import { downloadChartPng, downloadChartSvg, downloadCsv } from './chart-export';
-import { buildShareUrl, parseUrlState } from './url-state';
+import { buildShareUrl, MAX_MESSAGE_LENGTH, MAX_SEED, parseSeed, parseUrlState } from './url-state';
 import { createTour, type TourStep } from './tour';
 import { ML_DSA_65, randomBytes, randomInt, setSeed } from './mldsa-primitives';
 import {
@@ -72,6 +72,9 @@ const nobleVersion = (pkg.dependencies?.['@noble/post-quantum'] ?? '').replace(/
 // Shared links restore preset, seeded mode, message, and exploratory p.
 const urlState = parseUrlState(window.location.search);
 
+const linkedSeed = new URLSearchParams(window.location.search).get('seed');
+const seedHelp = 'Enter a whole-number seed from 0 through 4294967295.';
+
 const state: AppState = {
   keypair: ml_dsa65.keygen(),
   currentMessage: urlState.message ?? 'Transfer $1000 to Bob',
@@ -81,7 +84,7 @@ const state: AppState = {
   currentPreset: urlState.preset !== undefined && isPresetName(urlState.preset) ? urlState.preset : 'ML-DSA-65',
   reasonBreakdown: new Map(),
   customAcceptance: urlState.customAcceptance ?? null,
-  deterministic: urlState.deterministic ?? false,
+  deterministic: urlState.deterministic ?? linkedSeed !== null,
   seed: urlState.seed ?? 42,
   lastSig: null,
   step: null,
@@ -139,7 +142,8 @@ app.innerHTML = `
     </div>
     <div class="controls subtle">
       <label class="inline-check" for="deterministic"><input type="checkbox" id="deterministic" /> Reproducible (seeded)</label>
-      <label class="inline-check seed-field" for="seed" hidden>seed <input type="number" id="seed" value="42" min="0" step="1" /></label>
+      <label class="inline-check seed-field" for="seed" hidden>seed <input type="number" id="seed" value="42" min="0" max="${MAX_SEED}" step="1" aria-describedby="seed-error" /></label>
+      <span id="seed-error" class="meta" role="status"></span>
       <span class="meta det-note" hidden>The seed derives both the keypair and the signing randomness, so the same seed replays the exact real trace and signature — shareable via the link button.</span>
       <button id="copy-link" type="button">Copy shareable link</button>
       <span id="copy-link-result" class="meta" role="status" aria-live="polite"></span>
@@ -447,6 +451,7 @@ function signingInputs(): {
   if (!state.deterministic) {
     return { secretKey: state.keypair.secretKey, publicKey: state.keypair.publicKey, extraEntropy: undefined };
   }
+  if (invalidSeed()) throw new Error(seedHelp);
   setSeed(state.seed);
   const keySeed = randomBytes(32);
   const extraEntropy = randomBytes(32);
@@ -1098,11 +1103,36 @@ function cdfOverlaySvg(a: number[], b: number[]): string {
 // Actions
 // ---------------------------------------------------------------------------
 
+function invalidSeed(): boolean {
+  return state.deterministic && parseSeed(seedInput.value) === undefined;
+}
+
+function syncSigningControls(): void {
+  const invalid = invalidSeed();
+  signOnceButton.disabled = state.busy || invalid;
+  stepButton.disabled = state.busy || invalid;
+  seedInput.setAttribute('aria-invalid', String(invalid));
+  $('#seed-error').textContent = invalid ? seedHelp : '';
+  copyLinkButton.disabled = invalid || state.currentMessage.length > MAX_MESSAGE_LENGTH;
+  if (state.currentMessage.length > MAX_MESSAGE_LENGTH) {
+    copyLinkResult.textContent = 'To share a link, shorten the message to 200 UTF-16 code units or fewer.';
+  }
+}
+
+function signingInputChanged(): void {
+  state.step = null;
+  state.lastSig = null;
+  stepButton.textContent = 'Step ▶';
+  iterationFeed.replaceChildren();
+  tamperPanel.hidden = true;
+  signSummary.replaceChildren();
+  copyLinkResult.textContent = '';
+  syncSigningControls();
+}
+
 function setBusy(busy: boolean): void {
   state.busy = busy;
   for (const el of [
-    signOnceButton,
-    stepButton,
     regenKeyButton,
     run100,
     run1000,
@@ -1122,6 +1152,8 @@ function setBusy(busy: boolean): void {
   // setBusy(false) re-enable them unconditionally.
   pSlider.disabled = busy || !customPCheck.checked;
   seedInput.disabled = busy || !deterministicCheck.checked;
+  messageInput.readOnly = busy;
+  syncSigningControls();
 }
 
 async function runHistogramBatch(count: number): Promise<void> {
@@ -1303,10 +1335,11 @@ function revealLeakGuess(guess: 'a' | 'b'): void {
 
 messageInput.addEventListener('input', () => {
   state.currentMessage = messageInput.value;
+  signingInputChanged();
 });
 
 async function triggerSignOnce(): Promise<void> {
-  if (state.busy) return;
+  if (state.busy || invalidSeed()) return;
   setBusy(true);
   try {
     await signOnce();
@@ -1355,10 +1388,12 @@ deterministicCheck.addEventListener('change', () => {
   // setBusy only reconciles this while a job runs; toggling while idle must
   // enable/disable the field directly.
   seedInput.disabled = !state.deterministic;
+  signingInputChanged();
 });
 seedInput.addEventListener('input', () => {
-  const v = Number.parseInt(seedInput.value, 10);
-  state.seed = Number.isFinite(v) ? v : 0;
+  const seed = parseSeed(seedInput.value);
+  if (seed !== undefined) state.seed = seed;
+  signingInputChanged();
 });
 
 tamperFlip.addEventListener('click', () => {
@@ -1603,10 +1638,11 @@ tourStartButton.addEventListener('click', () => tour.start());
 messageInput.value = state.currentMessage;
 presetSelect.value = state.currentPreset;
 deterministicCheck.checked = state.deterministic;
-seedInput.value = String(state.seed);
+seedInput.value = linkedSeed ?? String(state.seed);
 seedField.hidden = !state.deterministic;
 detNote.hidden = !state.deterministic;
 seedInput.disabled = !state.deterministic;
+syncSigningControls();
 if (state.customAcceptance !== null) {
   customPCheck.checked = true;
   pSlider.disabled = false;

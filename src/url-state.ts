@@ -16,7 +16,14 @@ export interface ShareableState {
   tour: boolean;
 }
 
-const MAX_MESSAGE_LENGTH = 200;
+export const MAX_MESSAGE_LENGTH = 200;
+export const MAX_SEED = 0xffffffff;
+
+export function parseSeed(raw: string | null): number | undefined {
+  if (raw === null || !/^\d+$/.test(raw)) return undefined;
+  const seed = Number(raw);
+  return Number.isInteger(seed) && seed <= MAX_SEED ? seed : undefined;
+}
 
 export function parseUrlState(search: string): Partial<ShareableState> {
   const params = new URLSearchParams(search);
@@ -27,15 +34,15 @@ export function parseUrlState(search: string): Partial<ShareableState> {
 
   if (params.get('det') === '1') out.deterministic = true;
 
-  const seed = Number.parseInt(params.get('seed') ?? '', 10);
-  if (Number.isFinite(seed) && seed >= 0) {
+  const seed = parseSeed(params.get('seed'));
+  if (seed !== undefined) {
     out.seed = seed;
     // A seed only makes sense reproducibly; sharing one implies det mode.
     out.deterministic = true;
   }
 
   const msg = params.get('msg');
-  if (msg !== null && msg.length > 0) out.message = msg.slice(0, MAX_MESSAGE_LENGTH);
+  if (msg !== null) out.message = msg.slice(0, MAX_MESSAGE_LENGTH);
 
   const p = Number.parseFloat(params.get('p') ?? '');
   if (Number.isFinite(p) && p >= 0.05 && p <= 0.6) out.customAcceptance = p;
@@ -52,7 +59,8 @@ export function buildShareUrl(base: string, state: ShareableState): string {
     params.set('det', '1');
     params.set('seed', String(state.seed));
   }
-  if (state.message.length > 0 && state.message.length <= MAX_MESSAGE_LENGTH) params.set('msg', state.message);
+  if (state.message.length > MAX_MESSAGE_LENGTH) throw new RangeError('The message exceeds the shareable link limit.');
+  params.set('msg', state.message);
   if (state.customAcceptance !== null) params.set('p', state.customAcceptance.toFixed(2));
   if (state.tour) params.set('tour', '1');
   return `${base}?${params.toString()}`;

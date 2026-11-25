@@ -25,6 +25,27 @@ describe('parseUrlState', () => {
     expect(s.deterministic).toBeUndefined();
   });
 
+  it('accepts both seed endpoints and refuses partial numbers or out-of-range values', () => {
+    for (const seed of ['0', '4294967295']) expect(parseUrlState('?seed=' + seed).seed).toBe(Number(seed));
+    for (const seed of ['', '1.5', '12x', '-1', '4294967296'])
+      expect(parseUrlState('?seed=' + seed).seed).toBeUndefined();
+  });
+
+  it('preserves an intentionally empty message in a replay URL', () => {
+    const state = {
+      preset: 'ML-DSA-65',
+      deterministic: true,
+      seed: 0,
+      message: '',
+      customAcceptance: null,
+      tour: false,
+    };
+    const url = buildShareUrl('https://example.test/', state);
+    expect(parseUrlState(new URL(url).search).message).toBe('');
+    expect(parseUrlState('').message).toBeUndefined();
+    expect(() => buildShareUrl('https://example.test/', { ...state, message: 'a'.repeat(201) })).toThrow(RangeError);
+  });
+
   it('caps overlong messages', () => {
     const s = parseUrlState(`?msg=${'a'.repeat(500)}`);
     expect(s.message).toHaveLength(200);

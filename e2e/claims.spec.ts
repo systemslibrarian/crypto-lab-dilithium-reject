@@ -610,3 +610,36 @@ test('each per-check example reports a freshly measured value from the real sign
     expect(verdict, `${kind}: ${measured} vs ${threshold}`).toBe(passes ? 'PASS' : 'REJECT');
   }
 });
+
+test('replaying an empty message keeps its trace and refuses invalid seeds', async ({ page, context }) => {
+  test.setTimeout(HEAVY);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('./?seed=4294967295');
+  const message = page.locator('#message-input');
+  const share = page.locator('#copy-link');
+  await message.fill('');
+  await signOnce(page);
+  const original = await feedFingerprints(page);
+  await share.click();
+  await expect(page.locator('#copy-link-result')).toContainText('copied');
+  const link = await page.evaluate(() => navigator.clipboard.readText());
+  await page.goto(link);
+  await expect(message).toHaveValue('');
+  await signOnce(page);
+  expect(await feedFingerprints(page)).toEqual(original);
+  for (const invalid of ['1.5', '', '-1', '4294967296']) {
+    await page.locator('#seed').fill(invalid);
+    await expect(page.locator('#seed-error')).toContainText('whole-number');
+    await expect(page.locator('#sign-once')).toBeDisabled();
+    await expect(page.locator('#step')).toBeDisabled();
+    await expect(share).toBeDisabled();
+    await expect(page.locator('#tamper-panel')).toBeHidden();
+  }
+  await page.locator('#seed').fill('0');
+  await expect(page.locator('#sign-once')).toBeEnabled();
+  await message.fill('x'.repeat(201));
+  await expect(share).toBeDisabled();
+  await expect(page.locator('#sign-once')).toBeEnabled();
+  await message.fill('x'.repeat(200));
+  await expect(share).toBeEnabled();
+});
